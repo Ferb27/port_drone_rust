@@ -1,0 +1,339 @@
+import React from 'react';
+import * as js_session from '../../js/state/session.js';
+import 'jquery';
+import 'jquery-ui-dist/jquery-ui.min.js';
+import Draggable from 'react-draggable';
+
+import * as js_siteConfig from '../../js/config/js_siteConfig.js';
+import * as js_common from '../../js/helpers/js_common.js';
+import { EVENTS as js_event } from '../../js/events/js_eventList.js';
+import {EventBridge} from '../../js/hooks/EventBridge.jsx';
+import { fn_do_modal_confirmation, fn_do_modal_alert, fn_helpPage } from '../../js/app/js_main.js';
+import ClssDialogBase from './jsc_dialog_base.jsx';
+import { fn_closeDialog as fn_closeDialogService, js_dialogs } from '../../js/app/dialogService.js';
+
+class ClssParameterItem extends React.Component {
+    constructor() {
+        super();
+        this.state = {};
+    }
+
+    componentDidMount() {
+        this.setState({ param_value: this.props.prop_param.param_value });
+        js_common.fn_console_log("PARAM:" + this.props.prop_param.param_value + " componentWillUpdate");
+    }
+
+    componentWillUpdate() {
+        this.state.param_value = this.props.prop_param.param_value;
+    }
+
+    fn_onParamChanged(e) {
+        const val = e.target.value;
+        this.props.prop_param.modified_value = val;
+        this.props.prop_param.is_dirty = true;
+        if (!val || isNaN(val)) {
+            this.props.prop_param.is_valid = false;
+        } else {
+            this.props.prop_param.is_valid = true;
+        }
+        this.setState({ param_value: e.target.value });
+    }
+
+    fn_saveParameter(e) {
+        if (this.props.prop_param.is_valid === false) {
+            fn_do_modal_alert(null, "Invalid value. Cannot save it.");
+            return;
+        }
+        const me = this;
+        fn_do_modal_confirmation("Confirmation", "Write Parameter to FCB?", function (p_approved) {
+            if (!p_approved) return;
+            js_session.fn_getAndruavFacade().API_WriteParameter(me.props.prop_unit, me.props.prop_param);
+            js_dialogs.fn_showParameters(me.props.prop_unit);
+        }, "YES");
+    }
+
+    render() {
+        let cls_color = " bg-white text-black-50";
+        if (this.props.prop_param.is_dirty === true) {
+            cls_color = this.props.prop_param.is_valid === false ? " bg-danger txt-theme-aware " : " bg-success txt-theme-aware ";
+        }
+        return (
+            <tr>
+                <td scope="row" className='smaller'>{this.props.prop_param.param_index}</td>
+                <td><p className='smaller'>{this.props.prop_param.param_id}</p></td>
+                <td>
+                    <input
+                        type="text"
+                        className={"form-control smaller " + cls_color}
+                        id={"prop_val" + this.props.prop_param.param_index}
+                        value={String(this.state.param_value)}
+                        onChange={(e) => this.fn_onParamChanged(e)}
+                    />
+                </td>
+                <td >
+                    <button className="btn btn-danger btn-sm btn_prop smaller" onClick={(e) => this.fn_saveParameter(e)}>
+                        Save
+                    </button>
+                </td>
+            </tr>
+        );
+    }
+}
+
+class ClssParametersList extends React.Component {
+    render() {
+        let p_params = [];
+        if (this.props.prob_unit) {
+            const c_list = this.props.prob_unit.m_FCBParameters.m_list_by_index_shadow;
+            const c_keys = Object.keys(c_list);
+            const c_len = c_keys.length;
+
+            if (c_len !== 0) {
+                for (let i = 0; i < c_len; ++i) {
+                    const c_parameter_message = c_list[c_keys[i]];
+                    if (!this.props.prop_search || c_parameter_message.param_id.toUpperCase().includes(this.props.prop_search.toUpperCase())) {
+                        p_params.push(
+                            <ClssParameterItem
+                                prop_unit={this.props.prob_unit}
+                                prop_param_value={c_parameter_message.param_value}
+                                prop_param={c_parameter_message}
+                                key={c_parameter_message.param_index}
+                            />
+                        );
+                    }
+                }
+            } else {
+                return <p className="text-danger">NO DATA</p>;
+            }
+        } else {
+            return <p className="text-danger">NO DATA</p>;
+        }
+
+        return (
+            <table className="table table-dark table-striped">
+                <thead>
+                    <tr>
+                        <th scope="col" className='small'>#</th>
+                        <th scope="col" className='small'>Param</th>
+                        <th scope="col" className='small'>Value</th>
+                        <th scope="col" className='small'>Operation</th>
+                    </tr>
+                </thead>
+                <tbody>{p_params}</tbody>
+            </table>
+        );
+    }
+}
+
+export default class ClssUnitParametersList extends ClssDialogBase {
+    constructor() {
+        super();
+        this.state = {
+            ...this.state,
+            m_search: "",
+            m_update: 0,
+            p_unit: null,
+        };
+        this.m_close = true;
+        this.m_flag_mounted = false;
+        this.modalRef = React.createRef();
+        this.key = Math.random().toString();
+
+        // Event subscriptions are owned by EventBridge siblings rendered
+        // below (see render()), which auto-unsubscribe on unmount via
+        // useEventSubscription.
+    }
+
+    componentDidMount() {
+        super.componentDidMount();
+        this.m_flag_mounted = true;
+        if (this.props.dialogProps) this.fn_displayForm(this, this.props.dialogProps?.unit);
+    }
+
+    componentWillUnmount() {
+        // Unsubscription is handled automatically by the EventBridge
+        // siblings (useEventSubscription) on unmount.
+        if (this.modalRef.current) {
+            this.modalRef.current.style.display = 'none';
+        }
+    }
+
+    fn_initDialog() {
+        const me = this;
+
+        // Add centering styles
+        this.modalRef.current.style.position = 'absolute';
+        this.modalRef.current.style.top = '50%';
+        this.modalRef.current.style.left = '50%';
+        this.modalRef.current.style.transform = 'translate(-50%, -50%)';
+
+        this.modalRef.current.style.display = 'none';
+        super.fn_initDialog();
+    }
+
+    fn_displayForm(p_me, p_andruavUnit) {
+
+        if (!p_me.m_flag_mounted) return;
+        p_me.setState({ p_unit: p_andruavUnit, m_update: p_me.state.m_update + 1 });
+        p_me.modalRef.current.style.display = 'block';
+        p_me.m_close = false;
+    }
+
+    fn_updateForm(p_andruavUnit) {
+
+        if (this.m_close) return;
+
+        if (!this.m_flag_mounted) return;
+
+        // EE_updateParameters is dispatched for ANY unit that receives a
+        // PARAM_VALUE message. Only refresh when the update is for the
+        // unit this dialog was opened for, otherwise multiple units
+        // streaming params would flip the dialog between them every few
+        // seconds.
+        if (p_andruavUnit === null || p_andruavUnit === undefined) return;
+        if (this.state.p_unit === null || this.state.p_unit === undefined) return;
+        if (p_andruavUnit.getPartyID() !== this.state.p_unit.getPartyID()) return;
+
+        this.setState({ p_unit: p_andruavUnit, m_update: this.state.m_update + 1 });
+    }
+
+    fn_closeDialog() {
+        fn_closeDialogService();
+    }
+
+    fn_getCurrentPartyID() {
+        if (this.state.p_unit) {
+            return this.state.p_unit.getPartyID();
+        }
+        return null;
+    }
+
+    fn_doResetParameters() {
+        if (!this.state.p_unit) return;
+        this.setState({ m_update: this.state.m_update + 1 });
+    }
+
+    fn_resetAll() {
+        if (!this.state.p_unit) return;
+        const me = this;
+        fn_do_modal_confirmation("Confirmation", "Undo all modified values?", function (p_approved) {
+            if (!p_approved) return;
+            me.fn_doResetParameters();
+        }, "YES");
+    }
+
+    fn_reloadAll() {
+        if (!this.state.p_unit) return;
+        const me = this;
+        fn_do_modal_confirmation("Confirmation", "Reload all parameters from FCB?", function (p_approved) {
+            if (!p_approved) return;
+            js_session.fn_getAndruavFacade().API_requestParamList(me.state.p_unit);
+        }, "YES");
+    }
+
+    fn_saveAll() {
+        if (!this.state.p_unit) return;
+        const me = this;
+        fn_do_modal_confirmation("Confirmation", "Write Parameter to FCB?", function (p_approved) {
+            if (!p_approved) return;
+            js_session.fn_getAndruavFacade().API_WriteAllParameters(me.state.p_unit);
+        }, "YES");
+    }
+
+    fn_onSearch(e) {
+        this.setState({ m_search: e.target.value });
+    }
+
+    fn_createParametersCtrl(p_andruavUnit) {
+        if (p_andruavUnit && Object.keys(p_andruavUnit.m_FCBParameters.m_list_by_index_shadow).length === 0) {
+            js_session.fn_getAndruavFacade().API_requestParamList(p_andruavUnit);
+        }
+
+        return (
+            <div className="row margin_zero">
+                <div key="HDR" className="row margin_zero">
+                    <div className="col-12">
+                        <div className="form-inline">
+                            <div className="form-group">
+                                <label htmlFor="txt_searchParam" className="txt-theme-aware">Search&nbsp;</label>
+                                <input
+                                    id="txt_searchParam"
+                                    type="text"
+                                    className="form-control input-sm"
+                                    placeholder=""
+                                    value={this.state.m_search}
+                                    onChange={(e) => this.fn_onSearch(e)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div key="params" id="parameters_sublist">
+                    <div>
+                        <div className="btn-group" role="group">
+                            <button
+                                type="button"
+                                className="btn btn-danger btn-sm ctrlbtn"
+                                title="Save all changes"
+                                onClick={(e) => this.fn_saveAll()}
+                            >
+                                SAVE
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-warning btn-sm ctrlbtn"
+                                title="Reset to current values"
+                                onClick={(e) => this.fn_resetAll(e)}
+                            >
+                                RESET
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-success btn-sm ctrlbtn"
+                                title="Reload parameter from FCB"
+                                onClick={(e) => this.fn_reloadAll(e)}
+                            >
+                                RELOAD
+                            </button>
+                        </div>
+                    </div>
+                    <ClssParametersList prop_search={this.state.m_search} prob_unit={p_andruavUnit} />
+                </div>
+            </div>
+        );
+    }
+
+    render() {
+        let p_andruavUnit = null;
+        let v_Name = "Unknown";
+
+        if (this.state.p_unit) {
+            p_andruavUnit = this.state.p_unit;
+            v_Name = p_andruavUnit.m_unitName;
+        }
+
+        const p_params = this.fn_createParametersCtrl(p_andruavUnit);
+
+        return (
+            <Draggable nodeRef={this.modalRef} handle=".js-draggable-handle" cancel="button, input, textarea, select, option, a">
+                <div
+                    id="modal_ctrl_parameters"
+                    className="card css_ontop border-light p-2"
+                    ref={this.modalRef}
+                    title="Parameters Control"
+                >
+                    <EventBridge eventName={js_event.EE_updateParameters} onEvent={(p_andruavUnit) => this.fn_updateForm(p_andruavUnit)} />
+                    {this.fn_renderDialogHeader('Parameters of: ' + v_Name)}
+                    {!this.state.isMinimized && (
+                    <div id="ctrl_main" className="card-body">
+                        {p_params}
+                    </div>
+                    )}
+                    <div id="modal_ctrl_parameters_footer" className="btn-group w-100 d-flex flex-wrap">
+                        {this.fn_renderDialogFooter()}
+                    </div>
+                </div>
+            </Draggable>
+        );
+    }
+}

@@ -1,0 +1,319 @@
+import React from 'react';
+
+import { EVENTS as js_event } from '../../js/events/js_eventList.js'
+import EventBridge from '../../js/hooks/EventBridge.jsx';
+
+import { js_andruavAuth } from '../../js/protocol/auth/js_andruav_auth.js'
+import { js_localStorage } from '../../js/state/js_localStorage.js'
+
+import ClssAltcha from '../micro_gadgets/jsc_altcha.jsx';
+
+// Registration and Regeneration Control
+export default class ClssLoginControl extends React.Component {
+    constructor() {
+        super();
+        this.state = {
+            is_connected: false,
+            btnConnectText: 'Login',
+            initialized: false,
+            accountId: '',
+            loginId: '',
+            accessCode: '',
+            recoveryCode: '',
+            errorMessage: '',
+            successMessage: '',
+            showProof: false,
+        };
+
+        this.m_loginNameRef = React.createRef();
+        this.m_proofRef = React.createRef();
+        this.m_altchaRef = React.createRef();
+
+        // Event subscriptions are owned by EventBridge siblings rendered
+        // below (see render()), which auto-unsubscribe on unmount via
+        // useEventSubscription.
+    }
+
+    componentWillUnmount() {
+        // Unsubscription is handled automatically by the EventBridge
+        // siblings (useEventSubscription) on unmount.
+    }
+
+    fn_EE_permissionReceived(params) {
+        // Update the state with the received account info
+        this.setState({
+            accountId: params.accountId || '',
+            loginId: params.loginId || '',
+            accessCode: params.accessCode || '',
+            recoveryCode: params.recoveryCode || '',
+            successMessage: "Access code generated successfully. Please save your AccessCode and Recovery Code — the recovery code is the only way to regenerate if you lose the access code.",
+            errorMessage: '',
+            showProof: false
+        });
+    }
+
+    fn_EE_permissionBadLogin(params) {
+        this.setState({
+            errorMessage: "Error: " + params.em,
+            successMessage: ''
+        });
+    }
+
+    fn_EE_authInProgress() {
+        this.setState({
+            errorMessage: '',
+            successMessage: 'Connecting...',
+        });
+    }
+
+    fn_EE_authBadLogin(params) {
+        const msg = params && params.em ? params.em : 'Login failed';
+        this.setState({
+            errorMessage: 'Login Error: ' + msg,
+            successMessage: '',
+        });
+    }
+
+    fn_EE_socketStatus(params) {
+        if (params && params.status === 'registered') {
+            this.setState({
+                errorMessage: '',
+                successMessage: 'Connected Successfully',
+            });
+        }
+    }
+
+    /**
+     * Reads the solved ALTCHA payload from the widget. Payloads are
+     * single-use server-side, so the widget is reset after every read —
+     * the next submit needs a fresh solve.
+     * @returns {string|null} the payload, or null (error message set) when
+     * the widget has not verified yet.
+     */
+    fn_takeCaptchaPayload() {
+        const widget = this.m_altchaRef.current;
+        const payload = widget ? widget.fn_getPayload() : null;
+        if (!payload) {
+            this.setState({
+                errorMessage: 'Please wait for the captcha check to complete, then retry.',
+                successMessage: ''
+            });
+            return null;
+        }
+        widget.fn_reset();
+        return payload;
+    }
+
+    fn_clickConnect(e) {
+        e.preventDefault(); // Prevent default anchor behavior
+        const v_captchaPayload = this.fn_takeCaptchaPayload();
+        if (!v_captchaPayload) return;
+        const v_permission = '0xffffffff';
+        js_andruavAuth.fn_generateAccessCode(this.m_loginNameRef.current.value, v_permission, v_captchaPayload);
+    }
+
+    fn_clickRegenerate(e) {
+        e.preventDefault(); // Prevent default anchor behavior
+        if (this.state.showProof !== true) {
+            // First click reveals the ownership-proof block — the field only
+            // exists in the regenerate flow, so first-time users never see it.
+            this.setState({ showProof: true }, () => {
+                if (this.m_proofRef.current) this.m_proofRef.current.focus();
+            });
+            return;
+        }
+        this.fn_confirmRegenerate();
+    }
+
+    fn_confirmRegenerate() {
+        const v_proof = this.m_proofRef.current ? this.m_proofRef.current.value.trim() : '';
+        if (!v_proof) {
+            this.setState({
+                errorMessage: 'Regenerate requires your current Access Code or Recovery Code as proof of ownership.',
+                successMessage: ''
+            });
+            if (this.m_proofRef.current) this.m_proofRef.current.focus();
+            return;
+        }
+        const v_captchaPayload = this.fn_takeCaptchaPayload();
+        if (!v_captchaPayload) return;
+        // Regenerate rotates the existing account's credential — the
+        // requested permission is ignored server-side (the stored
+        // permission is preserved).
+        const v_permission = '0xffffffff';
+        // The typed proof may be either credential — the server accepts
+        // the current access code in 'pwd' or the recovery code in 'rc'.
+        js_andruavAuth.fn_regenerateAccessCode(this.m_loginNameRef.current.value, v_permission, v_proof, v_proof, v_captchaPayload);
+    }
+
+    fn_cancelRegenerate() {
+        this.setState({ showProof: false });
+    }
+
+    fn_copyToClipboard() {
+        if (!this.state.accessCode) return;
+        navigator.clipboard.writeText(this.state.accessCode).then(() => {
+            // Optional: You could add a temporary "Copied!" message here if desired
+            this.setState({ successMessage: "Access Code copied to clipboard!" });
+            setTimeout(() => {
+                 this.setState({ successMessage: "Access Code Generated Successfully. Please check your email as well." });
+            }, 3000);
+        }, (err) => {
+            console.error('Async: Could not copy text: ', err);
+            this.setState({ errorMessage: "Failed to copy to clipboard" });
+        });
+    }
+
+
+    componentDidMount() {
+
+        if (this.state.initialized === true) {
+            return;
+        }
+
+        this.state.initialized = true;
+
+        // #txtLoginName is rendered below with ref={this.m_loginNameRef};
+        // seed it from localStorage via the ref instead of jQuery. (The
+        // input also has defaultValue=fn_getLoginName(), so this is the
+        // matching imperative set on mount.)
+        if (this.m_loginNameRef.current) {
+            this.m_loginNameRef.current.value = js_localStorage.fn_getLoginName();
+        }
+    }
+
+
+    render() {
+        let login = "Access Code Generator";
+        
+        return (
+            <div>
+                <EventBridge eventName={js_event.EE_Auth_Account_Created} onEvent={(data) => this.fn_EE_permissionReceived(data)} />
+                <EventBridge eventName={js_event.EE_Auth_Account_BAD_Operation} onEvent={(data) => this.fn_EE_permissionBadLogin(data)} />
+                <EventBridge eventName={js_event.EE_Auth_Account_Regenerated} onEvent={(data) => this.fn_EE_permissionReceived(data)} />
+                <EventBridge eventName={js_event.EE_Auth_Login_In_Progress} onEvent={() => this.fn_EE_authInProgress()} />
+                <EventBridge eventName={js_event.EE_Auth_BAD_Logined} onEvent={(data) => this.fn_EE_authBadLogin(data)} />
+                <EventBridge eventName={js_event.EE_onSocketStatus} onEvent={(data) => this.fn_EE_socketStatus(data)} />
+                <p className="txt-theme-aware text-center border border-success p-2"><strong>{login}</strong></p>
+                
+                {this.state.errorMessage && (
+                    <div className="alert alert-danger text-center" role="alert">
+                        {this.state.errorMessage}
+                    </div>
+                )}
+                
+                {this.state.successMessage && (
+                    <div className="alert alert-success text-center" role="alert">
+                        {this.state.successMessage}
+                    </div>
+                )}
+
+                <div id='login_form' >
+                    <div className="form-group al_l">
+                        <label htmlFor="txtLoginName" id="loginName" className="form-label">Email (LoginID)</label>
+                        <input type="email" id="txtLoginName" ref={this.m_loginNameRef} name="txtLoginName" className="form-control" defaultValue={js_localStorage.fn_getLoginName()} />
+
+                        {/* Display the generated account details */}
+                        {this.state.accessCode && (
+                            <div className="mt-3">
+                                <label className="form-label">Access Code:</label>
+                                <div className="input-group">
+                                    <input
+                                        type="text"
+                                        className="form-control text-warning bg-secondary fw-bold"
+                                        value={this.state.accessCode}
+                                        readOnly
+                                    />
+                                    <button
+                                        className="btn btn-outline-secondary"
+                                        type="button"
+                                        onClick={() => this.fn_copyToClipboard()}
+                                        title="Copy to clipboard"
+                                    >
+                                        <i className="bi bi-clipboard"></i> Copy
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        {this.state.recoveryCode && (
+                            <div className="mt-3">
+                                <label className="form-label">Recovery Code (save it — shown once):</label>
+                                <div className="input-group">
+                                    <input
+                                        type="text"
+                                        className="form-control text-info bg-secondary fw-bold"
+                                        value={this.state.recoveryCode}
+                                        readOnly
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+
+                    <br />
+                </div>
+
+                <div className="mb-3">
+                    <p className="text-warning small mb-0">
+                        <i className="bi bi-shield-check me-1"></i>
+                        "AccessCode" creates a new TeamID with an Admin (Full Control) account. "Regenerate" requires your current Access Code or Recovery Code.
+                    </p>
+                </div>
+
+                <div className="container p-0">
+                    <div className="form-group">
+
+                        <div className="col mt-3">
+                            <ClssAltcha ref={this.m_altchaRef} p_challengeUrl={js_andruavAuth.fn_getCaptchaChallengeUrl()} />
+                        </div>
+
+                        {/* Ownership proof — revealed only by the Regenerate flow;
+                            replaces the action buttons so a single action set is
+                            active at a time. Cancel restores the buttons. */}
+                        {this.state.showProof ? (
+                            <div className="col mt-3">
+                                <div className="border border-warning rounded text-warning py-2 px-3 mb-2" role="alert" style={{ fontSize: '0.9rem' }}>
+                                    <i className="bi bi-shield-lock me-1"></i>
+                                    <strong>Regenerate replaces your current Access Code.</strong><br />
+                                    To prove ownership, enter your current Access Code — or your
+                                    one-time Recovery Code if you lost it — then confirm below.
+                                </div>
+                                <input type="password" id="txtAccountProof" ref={this.m_proofRef} name="txtAccountProof" className="form-control mb-2" placeholder="Access Code or Recovery Code" />
+                                <div className="row g-2">
+                                    <div className="col-8">
+                                        <button type="button" className="btn btn-sm btn-danger w-100" onClick={() => this.fn_confirmRegenerate()}>
+                                            <i className="bi bi-arrow-repeat"></i> Confirm Regenerate
+                                        </button>
+                                    </div>
+                                    <div className="col-4">
+                                        <button type="button" className="btn btn-sm btn-outline-secondary w-100" onClick={() => this.fn_cancelRegenerate()}>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="col mt-3">
+                                <div className="row g-2">
+                                    <div className="col-6">
+                                        <button id='login_btn' className="btn btn-sm btn-primary w-100" onClick={(e) => this.fn_clickConnect(e)}>
+                                            <i className="bi bi-download"></i> AccessCode
+                                        </button>
+                                    </div>
+                                    <div className="col-6">
+                                        <button id='regenerate_btn' className="btn btn-sm btn-danger w-100" onClick={(e) => this.fn_clickRegenerate(e)}>
+                                            <i className="bi bi-arrow-repeat"></i> Regenerate
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+                </div>
+
+            </div>
+        );
+    }
+}

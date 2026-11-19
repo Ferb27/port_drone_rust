@@ -1,0 +1,26 @@
+/*************************************************************************************
+ * 
+ *   A N D R U A V -  Server Configuration File      JAVASCRIPT  LIB
+ * 
+ *   Author: Mohammad S. Hefny
+ * 
+ *   Date:   08 Sep 2016
+ * 
+ * 
+ * 
+ */
+
+"use strict";
+
+const common = require("de_fork_server_common");
+const path = require("path");
+
+module.exports = common.create({
+    configDir: path.join(__dirname, '..'),
+    enableHashHandling: false,   // comm server has no $$HASH$$ feature
+    envOverrides: {
+        'de_comm_debug_logging': (cfg, val) => {
+            cfg.debug_logging = (val === 'true' || val === '1');
+        }
+    }
+});

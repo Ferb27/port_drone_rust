@@ -1,0 +1,160 @@
+[
+    {
+        "name": "Serial TX/RX Connection",
+        "template": {
+            "Serial TX/RX Connection": {
+                "fieldName": "fcb_connection_uri",
+                "type": "object",
+                "fields": {
+                    "type": {
+                        "order":1,
+                        "type": "combo",
+                        "defaultvalue": "serial",
+                        "list_values": [
+                            "serial"
+                        ]
+                    },
+                    "port": {
+                        "order":2,
+                        "type": "text",
+                        "defaultvalue": "auto"
+                    },
+                    "baudrate": {
+                        "order":3,
+                        "type": "number",
+                        "defaultvalue": "115200",
+                        "desc": "115200, 57600, ...etc."
+                    },
+                    "dynamic": {
+                        "order":4,
+                        "type": "checkbox",
+                        "defaultvalue": false,
+                        "desc": "if active then it will search from for example /dev/ttyUSB0 to /dev/ttyUSB10 so if you make it true do noot write a number next to port path."
+                    }
+                },
+                "optional": false,
+                "desc": "serial port settings - ONLY ONE fcb_connection_uri"
+            }
+        }
+    },
+    {
+        "name": "Net tcp/udp Connection",
+        "template": {
+            "TCP/UDP Connection": {
+                "fieldName": "fcb_connection_uri",
+                "type": "object",
+                "fields": {
+                    "type": {
+                        "type": "combo",
+                        "defaultvalue": "udp",
+                        "list_values": [
+                            "tcp",
+                            "udp"
+                        ],
+                        "desc": "tcp client or UDP listner"
+                    },
+                    "ip": {
+                        "type": "text",
+                        "defaultvalue": "127.0.0.1",
+                        "desc": "if tcp then ip of the board, otherwise make it 127.0.0.1",
+                        "css": "bg-warning"
+                    },
+                    "port": {
+                        "type": "number",
+                        "defaultvalue": 14550
+                    }
+                },
+                "optional": false,
+                "desc": "TCP/UDP connection settings - ONLY ONE fcb_connection_uri"
+            }
+        }
+    },
+    {
+        "name": "MAVLink IDs",
+        "template": {
+            "MAVLink IDs": {
+                "fieldName": "mavlink_ids",
+                "type": "object",
+                "fields": {
+                    "only_allow_ardupilot_sysid": {
+                        "order": 1,
+                        "type": "number",
+                        "defaultvalue": 0,
+                        "desc": "Only receive mavlinks from specified system ID (0 = no restriction)",
+                        "optional": true
+                    },
+                    "only_allow_ardupilot_compid": {
+                        "order": 2,
+                        "type": "number",
+                        "defaultvalue": 0,
+                        "desc": "Only receive mavlinks from specified component ID (0 = no restriction)",
+                        "optional": true
+                    },
+                    "de_mavlink_gcs_id": {
+                        "order": 3,
+                        "type": "number",
+                        "defaultvalue": 255,
+                        "desc": "Local GCS system ID (0 = default 255, -1 = disable heartbeat)",
+                        "optional": false
+                    }
+                },
+                "optional": false,
+                "desc": "MAVLink system and component ID configuration"
+            }
+        }
+    },
+    {
+        "name": "Precision Landing",
+        "template": {
+            "Precision Landing": {
+                "fieldName": "precland",
+                "type": "object",
+                "fields": {
+                    "enabled": {
+                        "order": 1,
+                        "type": "checkbox",
+                        "defaultvalue": false,
+                        "desc": "Forward de_precland targets to the FC as LANDING_TARGET. OFF is the safe default."
+                    },
+                    "allowed_modes": {
+                        "order": 2,
+                        "type": "array",
+                        "defaultvalue": [12, 2],
+                        "desc": "VEHICLE_MODE_* codes allowed to emit (12=LAND, 2=RTL)",
+                        "optional": true
+                    },
+                    "max_target_age_ms": {
+                        "order": 3,
+                        "type": "number",
+                        "defaultvalue": 300,
+                        "desc": "Reject captures older than this (ms)",
+                        "optional": true
+                    },
+                    "max_send_hz": {
+                        "order": 4,
+                        "type": "number",
+                        "defaultvalue": 10,
+                        "desc": "Max LANDING_TARGET rate to the FC",
+                        "optional": true
+                    },
+                    "min_tags": {
+                        "order": 5,
+                        "type": "number",
+                        "defaultvalue": 1,
+                        "desc": "Minimum AprilTags fused into a solve",
+                        "optional": true
+                    },
+                    "frame": {
+                        "order": 6,
+                        "type": "number",
+                        "defaultvalue": 12,
+                        "desc": "MAV_FRAME_BODY_FRD=12. ArduPilot rejects other frames for this vector (Plnd: Frame not supported); de_mavlink ignores any other value.",
+                        "optional": true
+                    }
+                },
+                "optional": true,
+                "desc": "Precision-landing safety gate: emits MAVLink LANDING_TARGET only when armed, in an allowed mode, with a fresh target, and no active tracker."
+            }
+        }
+    }
+]

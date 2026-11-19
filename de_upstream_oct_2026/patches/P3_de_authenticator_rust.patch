@@ -1,0 +1,13 @@
+diff --git a/src/web/mod.rs b/src/web/mod.rs
+index de20580..127801c 100644
+--- a/src/web/mod.rs
++++ b/src/web/mod.rs
+@@ -94,7 +94,7 @@ impl Web {
+             auth: p_auth,
+             web_login_limit: SlidingLimiter::new(10),
+             web_account_limit: SlidingLimiter::new(30),
+-            agent_login_limit: SlidingLimiter::new(10),
++            agent_login_limit: SlidingLimiter::new(1000), // fork P3: was 10/min; SITL batch logins
+             agent_account_limit: SlidingLimiter::new(13),
+             views: v_views,
+             root: v_root,

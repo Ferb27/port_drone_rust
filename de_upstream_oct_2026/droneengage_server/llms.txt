@@ -1,0 +1,140 @@
+# DroneEngage Communication Server
+
+## Project Summary
+DroneEngage Communication Server is the real-time messaging backbone for the DroneEngage/Andruav drone management ecosystem. It handles WebSocket-based communication between drone units and Ground Control Stations (GCS), implements server-to-server mesh relay for scalable message propagation, and supports message routing with group and individual targeting using Ed25519 cryptographic authentication.
+
+## Tech Stack
+- **Language**: Rust (stable), async on tokio
+- **Real-time**: WebSocket (tokio-tungstenite) over TLS (rustls)
+- **Authentication**: Ed25519 (ed25519-dalek) and HMAC-SHA256 S2S authentication
+- **Storage**: tasks and news go through the storage server (S2S link)
+- **Plugins**: Rust crates compiled in (droneengage_server_plugins builds the binary with them)
+
+## Architecture
+Three operational modes:
+1. **Standalone**: Independent server for local communication
+2. **Child Server**: Connects to parent server for message relay
+3. **Parent (Super) Server**: Accepts child connections and forwards messages
+
+Core components:
+- **WebSocket Server**: Main communication channel for units and GCS
+- **S2S Relay**: Server-to-server mesh network for message propagation
+- **UDP Proxy**: Handles UDP packet forwarding
+- **Chat System**: Message routing and room management
+
+## Key Files
+- `src/main.rs`, `src/cli.rs` - Entry point and command line; `src/lib.rs` - startup sequence
+- `server.config` - JSON configuration (supports --config override, `.local` overlay)
+- `Cargo.toml` - Dependencies
+- `src/chat/connection.rs` - WebSocket server, HTTP upgrade, login and auth frames
+- `src/chat/routing.rs` - Message routing logic
+- `src/chat/rooms.rs`, `src/hub.rs` - Accounts, groups and connections
+- `src/chat/relay.rs` - S2S message relay
+- `src/s2s/parent.rs`, `src/s2s/child.rs` - Parent and child server S2S
+- `src/s2s/s2s_auth.rs` - Ed25519/HMAC S2S authentication
+- `src/s2s/auth_client.rs`, `src/s2s/db_proxy_client.rs`, `src/s2s/udp_relay_client.rs` - AUTH, storage and UDP relay links
+- `src/chat/tasks.rs`, `src/chat/news.rs` - Tasks and news
+- `src/constants.rs` - Message types, routing constants
+- `src/util.rs` - JavaScript-compatible JSON and value helpers
+
+## Configuration
+Configuration is centralized in `server.config` (JSON format). Key sections:
+- Server identity (server_id, server_ip, server_port, public_host)
+- Storage server connection (`enable_storage_server`)
+- S2S authentication (Ed25519 private key, trusted public keys for parent mode)
+- SSL/TLS certificates
+- Server roles (enable_super_server, enable_persistant_relay)
+- Parent/child server connection details
+- Logging configuration
+- Memory limits for auto-restart
+
+## Coding Standards
+- Use `global.m_logger` for logging (if enabled)
+- Use singleton pattern for chat server: `global.m_chat_server_singelton_get_instance()`
+- Several modules attached to `global` for easy access
+- Memory monitoring with auto-restart on limit exceeded
+- Error handling: check `global.m_logger` existence before use
+- Reuse utilities in `src/helpers/` directory
+
+## Message Routing
+Messages routed based on `ty` (type) and `tg` (target) fields:
+- **Types**: `'g'` (group broadcast), `'i'` (individual), `'s'` (system/local)
+- **Targets**: `'_GCS_'` (all GCS), `'_GD_'` (all units), `'_AGN_'` (all agents), or specific unit ID
+- **Loop prevention**: Uses `_path` array to track message traversal
+- **Local messages**: Forwarded to relay servers
+- **External messages**: Delivered locally only (no re-forwarding)
+
+## S2S Authentication
+- Uses Ed25519 cryptographic signatures
+- Child servers connect to parent with private key
+- Parent servers verify child signatures with trusted public keys
+- Challenge-response authentication flow
+- Keys generated via authenticator's `scripts/gen_s2s_keys.sh`
+- **Note:** Comm servers always attempt authentication when challenged. The accepting server (Auth Server or parent server) controls whether authentication is required via its configuration.
+
+## Database
+The comm server has no database of its own. Tasks (missions) and news are
+loaded and saved through the storage server (`enable_storage_server`, S2S
+link in `src/s2s/db_proxy_client.rs`).
+
+## Development
+```bash
+cargo build --release
+cp server.config server.config.local
+# Edit server.config.local
+mkdir -p ssl_local/ssl_airgap
+openssl req -x509 -newkey rsa:4096 -keyout ssl_local/ssl_airgap/domain.key -out ssl_local/ssl_airgap/domain.crt -days 365 -nodes
+./target/release/andruavmainserver --config=server.config
+```
+
+## Testing
+```bash
+cargo test
+cargo test --test relay
+```
+
+## Deployment
+```bash
+# Parent server
+./deployment/run_parent.sh
+
+# Child server
+./deployment/run_slave.sh
+```
+
+## Security Features
+- SSL/TLS for WebSocket connections
+- Ed25519 cryptographic S2S authentication
+- Configurable trusted server keys
+- Memory limit monitoring with auto-restart
+- UDP proxy with kernel buffer management
+
+## UDP Proxy
+- Handles UDP packet forwarding between units
+- Kernel buffer size checking and adjustment
+- Fixed port configuration option
+- Used for MAVLink and other UDP protocols
+
+## Memory Management
+- Configurable memory limit (memory_max in MB)
+- Automatic server restart when limit exceeded
+- Memory monitoring every 60 seconds
+- Prevents memory leaks from causing crashes
+
+## Related Projects
+- droneegnage_authenticator - Authentication server
+- droneengage_communication - Communication protocol
+- droneengage_webclient_react - React web client
+- droneengage_mavlink - MAVLink integration
+
+## Documentation
+- README.md - User-facing documentation
+- wiki/MessagePropagation.md - Message routing and relay architecture
+- wiki/S2SAuthentication.md - Server-to-server authentication setup
+- wiki/PerformanceComparison.md - Node.js vs Rust architecture and benchmark measurements
+- wiki/LIVE_TEST_ON_RPI.md - Real hardware benchmark comparing Node.js vs Rust on airgap.local
+
+
+
+## Version
+3.9.11

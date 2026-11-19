@@ -1,0 +1,331 @@
+#include <iostream>
+#include <cstring> 
+#include <sys/socket.h> 
+#include <arpa/inet.h> 
+#include <netinet/in.h> 
+#include <unistd.h>
+
+#include "../helpers/colors.hpp"
+#include "../helpers/json_nlohmann.hpp"
+using Json_de = nlohmann::json;
+
+#include "udpCommunicator.hpp"
+
+#include <plog/Log.h> 
+#include "plog/Initializers/RollingFileInitializer.h"
+
+
+
+
+
+
+de::comm::CUDPCommunicator::~CUDPCommunicator ()
+{
+    
+    #ifdef DEBUG
+	std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: ~CUDPCommunicator" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+
+    if (m_stopped_called == false)
+    {
+        #ifdef DEBUG
+	    std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: ~CUDPCommunicator" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        #endif
+
+        stop();
+    }
+
+    #ifdef DEBUG
+	std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: ~CUDPCommunicator" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+
+    // destroy mutex
+	//pthread_mutex_destroy(&m_lock);
+
+    #ifdef DEBUG
+	std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: ~CUDPCommunicator" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+
+}
+
+/**
+ * @brief 
+ * 
+ * @param host address of Communicator
+ * @param listenningPort port of communicator
+ */
+void de::comm::CUDPCommunicator::init (const char * host, int listenningPort, int chunkSize)
+{
+    
+    if (chunkSize >= MAX_UDP_DATABUS_PACKET_SIZE)
+    {
+        perror("invalid udp packet size.");
+        exit(EXIT_FAILURE);
+    }
+
+    if (chunkSize <= 0)
+    {
+        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Invalid UDP packet size (must be > 0): " << chunkSize << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    m_chunkSize = chunkSize;
+
+    
+    // pthread initialization
+	m_thread = pthread_self(); // get pthread ID
+	pthread_setschedprio(m_thread, SCHED_FIFO); // setting priority
+
+    
+    // Creating socket file descriptor 
+    if ( (m_SocketFD = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
+        perror("socket creation failed"); 
+        PLOG(plog::error) << "socket creation failed" ; 
+        exit(EXIT_FAILURE); 
+    }
+
+    if (!m_CommunicatorModuleAddress) {
+        std::cout << "UDP Listener  " << _ERROR_CONSOLE_TEXT_ << " Failed to allocate memory for sockaddr_in" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        PLOG(plog::error) << "UDP Listener Failed to allocate memory for sockaddr_in" ; 
+        exit(-1) ;
+    }
+
+    memset(m_CommunicatorModuleAddress.get(), 0, sizeof(struct sockaddr_in)); 
+     
+    // Communication Server (IP - PORT) 
+    m_CommunicatorModuleAddress->sin_family = AF_INET; 
+    m_CommunicatorModuleAddress->sin_port = htons(listenningPort); 
+    m_CommunicatorModuleAddress->sin_addr.s_addr = inet_addr(host);//INADDR_ANY; 
+    
+    
+    // Bind the socket with the server address 
+    if (bind(m_SocketFD, (const struct sockaddr *)m_CommunicatorModuleAddress.get(), sizeof(struct sockaddr_in)) < 0 ) 
+    { 
+        std::cout << "UDP Listener  " << _ERROR_CONSOLE_TEXT_ << " BAD BIND: " << host << ":" << listenningPort << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        PLOG(plog::error) << "UDP Listener BAD BIND: " << host << ":" << listenningPort ; 
+        exit(-1) ;
+    } 
+
+
+    std::cout << _LOG_CONSOLE_BOLD_TEXT << "Comm Server is Listening at " <<  _INFO_CONSOLE_TEXT << host << ":" <<  listenningPort << _NORMAL_CONSOLE_TEXT_ << std::endl;  
+
+    std::cout << _LOG_CONSOLE_BOLD_TEXT << "UDP Max Packet Size " << _INFO_CONSOLE_TEXT << chunkSize <<  _NORMAL_CONSOLE_TEXT_ << std::endl;
+
+}
+
+void de::comm::CUDPCommunicator::start()
+{
+    #ifdef DEBUG        
+        std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: start" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+    
+    // call directly as we are already in a thread.
+    if (m_starrted == true)
+        throw "Starrted called twice";
+
+    startReceiver ();
+
+    m_starrted = true;
+}
+
+
+void de::comm::CUDPCommunicator::startReceiver ()
+{
+    m_threadCreateUDPSocket = std::thread {[this](){ InternalReceiverEntry(); }};
+};
+
+void de::comm::CUDPCommunicator::stop()
+{
+    #ifdef DEBUG
+	std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: Stop" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+    
+    m_stopped_called = true;
+    try
+    {
+
+        if (m_SocketFD != -1)
+            shutdown(m_SocketFD, SHUT_RDWR);
+    
+    #ifdef DEBUG
+	std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: Stop Socket Closed" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+
+        if (m_threadCreateUDPSocket.joinable())
+        {
+            m_threadCreateUDPSocket.join();
+        }
+
+        #ifdef DEBUG
+	    std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: Stop Threads Killed" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        #endif
+    }
+    catch(...)
+    {
+        //std::cerr << e.what() << '\n';
+        PLOG(plog::error) << "CUDPCommunicator::stop() exception" ; 
+    }
+
+    #ifdef DEBUG
+	std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: Stop out" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+}
+
+
+void de::comm::CUDPCommunicator::InternalReceiverEntry()
+{
+    #ifdef DDEBUG        
+        std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: InternalReceiverEntry" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+    
+    // https://stackoverflow.com/questions/2876024/linux-is-there-a-read-or-recv-from-socket-with-timeout
+    struct timeval tv;
+    tv.tv_sec = 1; // timeout_in_seconds;
+    tv.tv_usec = 0;
+    setsockopt(m_SocketFD, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+
+    struct sockaddr_in  cliaddr;
+    int n;
+    __socklen_t sender_address_size = sizeof (cliaddr);
+   
+    std::map<in_port_t, std::vector<std::vector<uint8_t>>> receivedChunksBySource; // Map to store concatenated chunks by source
+
+    while (!m_stopped_called)
+    {
+        // TODO: you should send header ot message length and handle if total message size is larger than MAXLINE.
+        n = recvfrom(m_SocketFD, (char *)m_buffer, MAXLINE,  
+                MSG_WAITALL, ( struct sockaddr *) &cliaddr, &sender_address_size);
+        
+        if (n > 0) 
+        {
+            try
+            {
+                if (n < 2)
+                {
+                    std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Received packet too small: " << n << " bytes" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                    continue;
+                }
+
+                // First two bytes represent the chunk number
+                const uint16_t chunkNumber = (m_buffer[1] << 8) | m_buffer[0]; 
+                #ifdef DDEBUG        
+                    std::cout << "chunkNumber:" << chunkNumber << " :len :" << n << std::endl;
+                #endif
+                if (chunkNumber==0)
+                {
+                    // clear any corrupted/incomplete packets
+                    receivedChunksBySource[cliaddr.sin_port].clear();
+                }
+                
+                // Last packet is always equal to 0xFFFF regardless of its actual number.
+                const bool end = chunkNumber == 0xFFFF;
+
+                // Store the received chunk in the map
+                //! IF MODULE connects and disconnects from many ports this vector will contain orphan data.
+                std::vector<std::vector<uint8_t>>& chunkVector = receivedChunksBySource[cliaddr.sin_port];
+
+                chunkVector.emplace_back(m_buffer + 2 * sizeof(uint8_t), m_buffer + n);
+
+                // Check if we have received all the chunks
+                if (end)
+                {
+                    // Concatenate the chunks in order
+                    
+                    std::vector<uint8_t> concatenatedData;
+                    for (auto& chunk : chunkVector)
+                    {
+                        concatenatedData.insert(concatenatedData.end(), chunk.begin(), chunk.end());
+                    }
+                    
+                    concatenatedData.push_back(0);
+
+                    // Call the onReceive callback with the concatenated data
+                    if (m_callback != nullptr)
+                    {
+                            m_callback->onReceive((const char *) concatenatedData.data(), concatenatedData.size(), &cliaddr);
+                    }
+
+                    // Clear the map for the next set of chunks
+                    receivedChunksBySource[cliaddr.sin_port].clear();
+                }
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error in InternalReceiverEntry: " << e.what() << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                PLOG(plog::error) << "CUDPCommunicator::InternalReceiverEntry exception: " << e.what();
+            }
+            catch (...)
+            {
+                std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Unknown error in InternalReceiverEntry" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                PLOG(plog::error) << "CUDPCommunicator::InternalReceiverEntry unknown exception";
+            }
+        }
+
+        
+    }
+
+    #ifdef DEBUG
+	std::cout <<__PRETTY_FUNCTION__ << " line:" << __LINE__ << "  "  << _LOG_CONSOLE_TEXT << "DEBUG: InternalReceiverEntry EXIT" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+}
+
+
+
+
+/**
+ * Sends JMSG to Communicator
+ **/
+void de::comm::CUDPCommunicator::SendMsg(const char * message, const std::size_t datalength, struct sockaddr_in * module_address, int chunkSizeOverride)
+{
+    std::lock_guard<std::mutex> lock(m_lock);
+
+    const int effectiveChunkSize = (chunkSizeOverride > 0) ? chunkSizeOverride : m_chunkSize;
+
+    try
+    {
+        int remainingLength = datalength;
+        int offset = 0;
+        uint8_t chunk_number = 0;
+
+        while (remainingLength > 0)
+        {
+            int chunkLength = std::min(effectiveChunkSize, remainingLength);
+            remainingLength -= chunkLength;
+            
+            // Create a new message with the chunk size + sizeof(uint8_t)
+            char chunkMsg[chunkLength + 2 * sizeof(uint8_t)];
+
+            // Set the first byte as chunk number
+            if (remainingLength==0)
+            {
+                // Last packet is always equal to 255 (0xff) regardless if its actual number.
+                chunkMsg[0] = 0xFF;
+                chunkMsg[1] = 0xFF;
+            }
+            else
+            {
+                chunkMsg[0] = static_cast<uint8_t>(chunk_number & 0xFF);
+                chunkMsg[1] = static_cast<uint8_t>((chunk_number >> 8) & 0xFF);
+            }
+
+            // Copy the chunk data into the message
+            std::memcpy(chunkMsg + 2 * sizeof(uint8_t), message + offset, chunkLength);
+
+            sendto(m_SocketFD, chunkMsg, chunkLength + 2 * sizeof(uint8_t),
+                MSG_CONFIRM, (const struct sockaddr*) module_address,
+                sizeof(struct sockaddr_in));
+
+            if (remainingLength!=0) 
+            {
+                // fast sending causes packet loss.
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            offset += chunkLength;
+            chunk_number++;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+}

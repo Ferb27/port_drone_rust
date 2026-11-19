@@ -1,0 +1,43 @@
+/target/
+doxygen_docs
+ssl/
+*.ignore
+logs/
+.vscode
+checks.json
+server.home.config
+
+local/
+*.db
+*.old
+*.code-workspace
+database/database.db
+file_db.json
+scripts/*.pem
+
+*.tmp
+build/
+
+# Local config override (merged on top of server.config at runtime)
+server.config.local
+# Devin local config (machine-local)
+.devin/config.local.json
+
+*.local.sh
+.playwright-mcp/
+
+# machine-local cargo config (scripts/local_server_common.sh)
+.cargo/
+
+# Node deps (rust port keeps a few js tools)
+node_modules/
+
+# never publish: private keys, per-machine config, shared secrets
+*.key
+*_private.pem
+s2s_shared_secret.key*
+.env.local
+
+# prod-only cutover scripts (production paths, pm2 app names)
+/scripts/de_cutover.sh
+/scripts/de_switch_db.sh

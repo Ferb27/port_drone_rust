@@ -1,0 +1,26 @@
+
+file(GLOB folder_src "./*.cpp")
+file(GLOB folder_helpers "./helpers/*.cpp")
+file(GLOB folder_common "./comm_server/*.cpp")
+file(GLOB folder_hal "./hal/*.cpp")
+file(GLOB folder_hal_linux "./hal_linux/*.cpp")
+file(GLOB notification_module "./notification_module/*.cpp")
+file(GLOB folder_uavos "./de_broker/*.cpp")
+file(GLOB folder_uavos_common "./de_broker/common/*.cpp")
+file(GLOB folder_general_mission_planner "./de_general_mission_planner/*.cpp")
+
+set(files ${folder_src} ${folder_common} ${folder_helpers}
+${folder_hal} ${folder_hal_linux} ${notification_module} ${folder_uavos} ${folder_uavos_common} ${folder_general_mission_planner})
+
+
+add_executable( OUTPUT_BINARY ${files})
+
+set_target_properties( OUTPUT_BINARY 
+                PROPERTIES 
+                    OUTPUT_NAME "de_comm"
+                )
+
+include_directories(./3rdparty)
+
+target_link_libraries(OUTPUT_BINARY   OpenSSL::Crypto OpenSSL::SSL CURL::libcurl Threads::Threads )
+target_link_libraries(OUTPUT_BINARY ${Boost_LIBRARIES})

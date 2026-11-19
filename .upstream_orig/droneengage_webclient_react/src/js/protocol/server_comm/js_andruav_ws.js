@@ -1,0 +1,755 @@
+import * as js_session from '../../state/session.js';
+import { EVENTS as js_event } from '../../events/js_eventList.js'
+import * as js_helpers from '../../helpers/js_helpers.js';
+import * as js_siteConfig from '../../config/js_siteConfig.js';
+import * as js_andruavMessages from '../messages/js_andruavMessages.js';
+
+import * as js_common from '../../helpers/js_common.js'
+import { js_localStorage } from '../../state/js_localStorage.js'
+import { js_eventEmitter } from '../../events/js_eventEmitter.js'
+import { fn_showSecurityDialog, fn_do_modal_alert } from '../../app/js_main.js'
+
+import * as js_andruav_facade from './js_andruav_facade.js'
+import * as js_andruav_parser from './js_andruav_parser.js'
+import { fn_getOrCreateUnit, fn_createSelfUnit } from '../../model/unitRegistry.js'
+import { fn_handleFrame } from '../../core/protocol/runtime.js'
+import { notifyUnitFieldChanged } from '../../store/unitStore.js'
+
+
+export const CMD_SYS_TASKS = 'tsk'; //'tsk'; // group broadcast
+
+export const CONST_TARGETS_GCS = '_GCS_';
+export const CONST_TARGETS_DRONES = '_AGN_';
+
+// Command Types either System or Communication
+const CMDTYPE_SYS = 's'; // system command
+const CMDTYPE_COMM = 'c';// 'c';
+
+// Communication Commands
+const CMD_COMM_GROUP = 'g'; // group broadcast
+const CMD_COMM_INDIVIDUAL = 'i';
+
+// System Commands:
+const CMD_SYS_PING = 'ping'; //'ping'; // group broadcast
+
+// Auth-frame protocol (security item 2.1): credentials are always sent as
+// the first WS message instead of in the URL query string (cloud mode).
+// See js_siteConfig.js for the full protocol spec.
+const CMD_SYS_DE_AUTH = 'de_auth';        // client -> server: auth frame
+const CMD_SYS_DE_AUTH_ACK = 'de_auth_ack'; // server -> client: auth result
+const CONST_AUTH_FRAME_TIMEOUT = 8000;     // ms to wait for auth-ack
+
+const c_SOCKET_STATUS = [
+    'Fresh',
+    'Connecting',
+    'Disconnecting',
+    'Disconnected',
+    'Connected',
+    'Registered',
+    'UnRegistered',
+    'Error'
+];
+
+class CAndruavClientWS {
+
+
+    constructor() {
+
+        this.fn_init();
+
+        Object.seal(this);
+    }
+
+    static getInstance() {
+        if (!CAndruavClientWS.instance) {
+            CAndruavClientWS.instance = new CAndruavClientWS();
+        }
+        return CAndruavClientWS.instance;
+    }
+
+
+    fn_init() {
+        this.ws = null;
+        this.partyID = null;
+        this.unitID = null;
+        this.m_groupName = null;
+
+        this.m_server_ip = null;
+        this.m_server_port = null;
+        this.m_server_port_ss = null;
+        this.server_AuthKey = null;
+        this.m_permissions = null;
+        this.server_accessCode = null;
+
+        this.socketStatus = js_andruavMessages.CONST_SOCKET_STATUS_FREASH;
+        this.socketConnectionDone = false;
+        this.m_andruavUnit = null;
+
+        this.m_timer_id = null;
+        this.m_newsResyncTimer_id = null;
+
+        // Auth-frame state (security item 2.1)
+        this.m_authViaFrame = false;   // true when credentials are sent via a post-open frame
+        this.m_authPending = false;    // true while waiting for de_auth_ack
+        this.m_authTimeoutHandle = null;
+
+        js_andruav_parser.AndruavClientParser.fn_init();
+        js_andruav_facade.AndruavClientFacade.fn_init();
+    }
+
+    fn_destroy() {
+        // Close WebSocket if open
+        if (this.ws) {
+            try {
+                this.ws.close();
+            } catch (error) {
+                js_common.fn_console_log(`Error closing WebSocket: ${error.message}`);
+            }
+            this.ws = null;
+        }
+
+        // Clear timer if active
+        this._clearTimer();
+
+        // Clear auth-frame timeout (security item 2.1)
+        this.m_authPending = false;
+        if (this.m_authTimeoutHandle) {
+            clearTimeout(this.m_authTimeoutHandle);
+            this.m_authTimeoutHandle = null;
+        }
+    }
+
+
+    _clearTimer() {
+        if (this.m_timer_id) {
+            clearInterval(this.m_timer_id);
+            this.m_timer_id = null;
+        }
+    }
+
+    // please move it out side
+    fn_generateJSONMessage(p_senderID, p_targetID, p_msgRouting, p_msgID, p_msg) { // prepare json data
+        const p_jmsg = {
+            ty: p_msgRouting,
+            sd: p_senderID, // p_senderID,
+            st: 'w', // senderType Web,
+            tg: p_targetID,
+            mt: p_msgID, // msgID,
+            ms: p_msg
+
+        };
+
+
+        // js_common.fn_console_log("out:" + JSON.stringify(p_jmsg)); // Disable in production for perf
+
+        return JSON.stringify(p_jmsg);
+    };
+
+    API_sendCMD(p_target, msgType, msg) {
+        try {
+            let v_rountingMsg;
+            if (p_target !== null && p_target !== undefined) {
+                v_rountingMsg = CMD_COMM_INDIVIDUAL;
+            } else { // if you want to prevent GCS to GCS.
+                if ((p_target === null || p_target === undefined)
+                    && (js_siteConfig.CONST_DONT_BROADCAST_TO_GCSs === true
+                        || js_localStorage.fn_getGCSShowMe() === false)) {
+                    p_target = CONST_TARGETS_DRONES;
+                    v_rountingMsg = CMD_COMM_INDIVIDUAL;
+                } else {
+                    v_rountingMsg = CMD_COMM_GROUP;
+                }
+            }
+
+
+            const msgx_txt = this.fn_generateJSONMessage(this.partyID, p_target, v_rountingMsg, msgType, msg);
+            this.sendex(msgx_txt, false);
+
+        } catch (e) {
+            // js_common.fn_console_log("Exception API_sendCMD", e); // Disable in production for perf
+        }
+    };
+
+
+    API_sendBinCMD(targetName, msgType, data) {
+        let v_msgRouting;
+        if (targetName !== null && targetName !== undefined) {
+            v_msgRouting = CMD_COMM_INDIVIDUAL;
+        } else {
+            v_msgRouting = CMD_COMM_GROUP;
+        }
+
+        const h = js_helpers.fn_str2ByteArray(this.fn_generateJSONMessage(this.partyID, targetName, v_msgRouting, msgType));
+
+        const msgx_bin = js_helpers.fn_concatBuffers(h, data, true);
+        this.sendex(msgx_bin, true);
+    };
+
+
+    API_addMe2() {
+        if ((this.partyID === null || this.partyID === undefined) || (this.m_groupName === null || this.m_groupName === undefined))
+            return;
+
+
+        this.m_andruavUnit = fn_createSelfUnit(this.partyID, this.unitID, this.m_groupName);
+    };
+
+    API_delMe() {
+        const c_msg = {};
+        this.socketConnectionDone = false;
+
+        this._API_sendSYSCMD(js_andruavMessages.CONST_TYPE_AndruavSystem_LogoutCommServer, c_msg);
+    };
+
+    _API_sendSYSCMD(p_msgID, p_msg) {
+        this.sendex(this.fn_generateJSONMessage(this.partyID, null, CMDTYPE_SYS, p_msgID, p_msg));
+    };
+
+
+    sendex(msg, is_binary) {
+        try {
+            // Security item 2.1: block all outgoing traffic until the auth
+            // frame has been acknowledged by the server.
+            if (this.m_authPending === true) {
+                return;
+            }
+            if (this.ws) {
+                this.ws.sendex(msg, is_binary);
+            }
+        } catch (e) {
+            // js_common.fn_console_log("Exception API_sendCMD", e); // Disable in production for perf
+        }
+    }
+
+    fn_disconnect(p_accesscode) {
+
+        this.ws.close();
+        this.ws = null;
+
+    };
+
+    #prv_parseSystemMessage(Me, msg) {
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_ConnectedCommServer) {
+            if (msg.msgPayload.s.indexOf('OK:connected') !== -1) {
+                Me.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_CONNECTED);
+                Me.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_REGISTERED);
+
+            } else { /*Me.onLog ("connection refused");*/
+            }
+
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_LogoutCommServer) {
+            if (msg.msgPayload.s.indexOf('OK:del') !== -1) {
+                Me.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_FREASH);
+                js_eventEmitter.fn_dispatch(js_event.EE_onDeleted);
+
+            } else { /*Me.onLog ("refused to delete, maybe not existed. pls use dell instead of del to enforce addition.");*/
+            }
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_LoadMission) {
+            js_eventEmitter.fn_dispatch(js_event.EE_Mission_Loaded, msg.msgPayload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_SaveMission) {
+            js_eventEmitter.fn_dispatch(js_event.EE_Mission_Saved, msg.msgPayload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_DeleteMission) {
+            js_eventEmitter.fn_dispatch(js_event.EE_Mission_Deleted, msg.msgPayload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_StateServer) {
+            let p_payload = msg.msgPayload;
+            if (typeof p_payload === 'string' || p_payload instanceof String) {
+                try { p_payload = JSON.parse(p_payload); } catch (e) { return; }
+            }
+            js_eventEmitter.fn_dispatch(js_event.EE_StorageServerState, p_payload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_LoadNews) {
+            js_eventEmitter.fn_dispatch(js_event.EE_News_Loaded, msg.msgPayload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_SaveNews) {
+            js_eventEmitter.fn_dispatch(js_event.EE_News_Saved, msg.msgPayload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_DeleteNews) {
+            js_eventEmitter.fn_dispatch(js_event.EE_News_Deleted, msg.msgPayload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_NewsPush) {
+            js_eventEmitter.fn_dispatch(js_event.EE_News_Push, msg.msgPayload);
+            return;
+        }
+
+        if (msg.messageType === js_andruavMessages.CONST_TYPE_AndruavSystem_AisPush) {
+            js_eventEmitter.fn_dispatch(js_event.EE_AisStream_Push, msg.msgPayload);
+            return;
+        }
+    };
+
+    setSocketStatus(status) {
+        // MOVE LOGIC TO js_main 
+        this.socketStatus = status;
+
+        if (status === js_andruavMessages.CONST_SOCKET_STATUS_CONNECTED) {
+            this.API_addMe2();
+        }
+
+        if (status === js_andruavMessages.CONST_SOCKET_STATUS_REGISTERED) {
+            js_eventEmitter.fn_dispatch(js_event.EE_WS_OPEN, null);
+            this.socketConnectionDone = true;
+            js_andruav_facade.AndruavClientFacade.API_sendID(); // send now important
+            this.m_timer_id = setInterval(function () {
+                js_andruav_facade.AndruavClientFacade.API_sendID();
+                js_eventEmitter.fn_dispatch(js_event.EE_adsbExpiredUpdate, null);
+            }, js_andruavMessages.CONST_sendID_Interverl);
+
+            // request IDfrom all units
+            js_andruav_facade.AndruavClientFacade.API_requestID();
+
+            // News: load immediately, then periodically resync as a safety-net for
+            // any push (NewsPush) missed while disconnected/reconnecting.
+            js_andruav_facade.AndruavClientFacade.API_loadNews();
+            this.m_newsResyncTimer_id = setInterval(function () {
+                js_andruav_facade.AndruavClientFacade.API_loadNews();
+            }, js_andruavMessages.CONST_News_Resync_Interval);
+
+        } else {
+            clearInterval(this.m_timer_id);
+            clearInterval(this.m_newsResyncTimer_id);
+        }
+        js_eventEmitter.fn_dispatch(js_event.EE_onSocketStatus2, { status: status, name: c_SOCKET_STATUS[status - 1] });
+    };
+
+    getSocketStatus() {
+        return this.socketStatus;
+    }
+
+    isSocketConnectionDone() {
+        return this.socketConnectionDone;
+    }
+
+    #prv_parseJSONMessage(JsonMessage) {
+
+        const p_jmsg = JSON.parse(JsonMessage); // PHP sends Json data
+
+        const message = {
+            _ty: p_jmsg.ty,
+            groupID: p_jmsg.gr, // group name
+            senderName: p_jmsg.sd, // sender name
+            msgPayload: p_jmsg.ms
+        };
+
+        if (p_jmsg.hasOwnProperty('mt')) {
+            message.messageType = p_jmsg.mt;
+        }
+
+        return message;
+    };
+
+    #prv_extractBinaryPacket(evt) {
+        const Me = this;
+
+        // Directly handle ArrayBuffer
+        if (!(evt.data instanceof ArrayBuffer)) {
+            console.warn("Invalid data received, expected ArrayBuffer");
+            return;
+        }
+
+        Me.#handleBinaryData(evt.data);
+    }
+
+    #handleBinaryData(contents) {
+        const Me = this;
+
+        try {
+            // Convert binary data to Uint8Array
+            const data = new Uint8Array(contents);
+            const byteLength = contents.byteLength;
+
+            // Extract JSON command from binary data
+            const out = js_helpers.fn_extractString(data, 0, byteLength);
+            if (!out.text) {
+                throw new Error("No JSON command found in binary data");
+            }
+
+            // Parse JSON command
+            const andruavCMD = JSON.parse(out.text);
+            const p_jmsg = Me.#prv_parseJSONMessage(out.text);
+
+            // Find or create the unit
+            const { unit: v_unit, shouldRequestID } = fn_getOrCreateUnit(p_jmsg.senderName, true);
+            if (shouldRequestID) {
+                js_andruav_facade.AndruavClientFacade.API_requestID(p_jmsg.senderName);
+            }
+
+            // Update message statistics
+            v_unit.m_Messages.fn_addMsg(p_jmsg.messageType);
+            v_unit.m_Messages.m_received_msg++;
+            v_unit.m_Messages.m_received_bytes += data.length;
+            v_unit.m_Messages.m_lastActiveTime = Date.now();
+            notifyUnitFieldChanged(v_unit.getPartyID(), 'm_Messages.m_messages_in');
+            notifyUnitFieldChanged(v_unit.getPartyID(), 'm_Messages.m_received_msg');
+
+            // Process the binary message
+            js_session.fn_getAndruavClient().parseBinaryAndruavMessage(v_unit, andruavCMD, data, out.nextIndex, byteLength);
+        } catch (error) {
+            console.error("Error processing binary message:", error.message);
+        }
+    }
+
+
+    #prv_handleSSLError(err) {
+        try {
+            // Check if this is likely an SSL certificate error
+            const isSSLError = this.#prv_isLikelySSLError(err);
+            
+            if (isSSLError) {
+                console.warn('[WS] SSL certificate error detected');
+                this.#prv_showSecurityDialog();
+            }
+        } catch (error) {
+            console.error('[WS] Error handling SSL detection:', error);
+        }
+    }
+
+
+    #prv_isLikelySSLError(err) {
+        // Check various indicators that suggest an SSL certificate issue
+        const errorString = err ? err.toString() : '';
+        const isWSSConnection = this.ws && this.ws.url && this.ws.url.startsWith('wss://');
+        
+        // Common SSL certificate error patterns
+        const sslErrorPatterns = [
+            /SSL/i,
+            /TLS/i,
+            /certificate/i,
+            /secure/i,
+            /connection.*private/i,
+            /net::ERR_CERT/i,
+            /ERR_CERT_AUTHORITY_INVALID/i,
+            /ERR_CERT_COMMON_NAME_INVALID/i,
+            /ERR_CERT_DATE_INVALID/i,
+            /ERR_CERT_INVALID/i
+        ];
+        
+        // Check if any SSL error patterns match
+        const hasSSLErrorPattern = sslErrorPatterns.some(pattern => pattern.test(errorString));
+        
+        // Additional heuristics for WSS connections that fail quickly
+        const isWSSFailure = isWSSConnection && err && (
+            err.type === 'error' && 
+            (!err.message || err.message.length === 0)
+        );
+        
+        return hasSSLErrorPattern || isWSSFailure;
+    }
+
+
+    #prv_showSecurityDialog() {
+        fn_showSecurityDialog(this.m_server_ip, this.m_server_port_ss || this.m_server_port);
+    }
+
+
+    fn_connect(p_accesscode) {
+        try {
+
+            if (p_accesscode === null || p_accesscode === undefined) {
+                fn_do_modal_alert(null, "Password cannot be empty");
+                return;
+            }
+
+            this.server_accessCode = p_accesscode;
+
+            let url = null;
+            const lsPluginEnabled = js_localStorage.fn_getWebConnectorEnabled();
+            const usePlugin = (lsPluginEnabled !== null) ? lsPluginEnabled : (js_siteConfig.CONST_WEBCONNECTOR_CONFIG.ENABLED === true);
+            const isPluginTarget = usePlugin === true;
+            const pluginApiKey = (usePlugin === true) ? js_siteConfig.CONST_WEBCONNECTOR_CONFIG.APIKEY : '';
+            const pluginApiKeyQS = (pluginApiKey && pluginApiKey.length > 0) ? ('&k=' + encodeURIComponent(pluginApiKey)) : '';
+
+            // Security item 2.1: credentials are always sent as a post-open
+            // JSON frame instead of in the URL query string (which leaks into
+            // proxy/access logs and browser history).
+            //
+            // The auth frame applies to CLOUD mode only. The WebConnector
+            // plugin runs on localhost and does not understand the de_auth
+            // frame, so plugin mode always uses query-string auth (the
+            // localhost leak risk is negligible).
+            const authViaFrame = (usePlugin !== true);
+            this.m_authViaFrame = authViaFrame;
+            this.m_authPending = false;
+            if (this.m_authTimeoutHandle) {
+                clearTimeout(this.m_authTimeoutHandle);
+                this.m_authTimeoutHandle = null;
+            }
+
+            if (usePlugin === true) {
+                const wsProtocol = 'ws';
+                const port = this.m_server_port;
+                url = wsProtocol + '://' + this.m_server_ip + ':' + port + '?f=' + this.server_AuthKey + '&s=' + this.partyID + '&at=g' + pluginApiKeyQS;
+            } else {
+                if (window.location.protocol === 'https:') {
+                    // f: CONST_CS_LOGIN_TEMP_KEY
+                    // g: CONST_CS_SERVER_PUBLIC_HOST
+                    // s: SID
+                    url = 'wss://' + this.m_server_ip + ':' + this.m_server_port_ss;
+                } else {
+                    url = 'ws://' + this.m_server_ip + ':' + this.m_server_port;
+                }
+            }
+
+            try {
+                const safeUrl = String(url)
+                    .replace(/([?&]f=)[^&]*/i, '$1***')
+                    .replace(/([?&]k=)[^&]*/i, '$1***');
+                console.info('[WS] connect', {
+                    usePlugin: usePlugin === true,
+                    isPluginTarget: isPluginTarget === true,
+                    authViaFrame: authViaFrame === true,
+                    host: this.m_server_ip,
+                    port: this.m_server_port,
+                    hasPluginApiKey: (pluginApiKey && pluginApiKey.length > 0),
+                    url: safeUrl,
+                });
+            } catch {
+            }
+
+            if ("WebSocket" in window) {
+                this.ws = new WebSocket(url);
+                this.ws.binaryType = 'arraybuffer'; // Set to receive ArrayBuffer as ArrayBuffer for efficiency
+                this.ws.parent = this;
+                this.ws.sendex = function (msg, isbinary) {
+                    if (this.readyState === WebSocket.OPEN) {
+
+                        if (isbinary === null || isbinary === undefined || isbinary === false) {
+                            isbinary = false;
+                            this.send(msg);
+                        }
+                        else {
+                            this.send(msg); // Send ArrayBuffer directly (fn_concatBuffers should return ArrayBuffer)
+                        }
+                    } else {
+                        console.error("WebSocket is not yet open, cannot send message.");
+                    }
+                };
+                // OnOpen callback of Websocket
+                const Me = this;
+                this.ws.onopen = function () {
+                    // js_eventEmitter.fn_dispatch(js_event.EE_WS_OPEN, null);
+
+                    try {
+                        console.info('[WS] open', {
+                            readyState: Me.ws ? Me.ws.readyState : null,
+                            host: Me.m_server_ip,
+                            port: Me.m_server_port,
+                            authViaFrame: Me.m_authViaFrame === true,
+                        });
+                    } catch {
+                    }
+
+                    if (Me.m_authViaFrame === true) {
+                        // Send credentials as the first WS message (auth frame).
+                        // The server must reply with a de_auth_ack frame before
+                        // any other traffic is processed.
+                        Me.#fn_sendAuthFrame(pluginApiKey);
+                        return;
+                    }
+
+                    if (isPluginTarget === true) {
+                        try {
+                            console.info('[WebConnector][WS] forcing CONNECTED/REGISTERED on open');
+                        } catch {
+                        }
+                        Me.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_CONNECTED);
+                        Me.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_REGISTERED);
+                    }
+
+                };
+
+                // OnMessage callback of websocket
+                this.ws.onmessage = function (evt) {
+                    if (typeof evt.data === "string") { // This is a text message
+                        // Security item 2.1: intercept the auth-ack frame before
+                        // normal message processing while auth is pending.
+                        if (Me.m_authPending === true) {
+                            if (Me.#fn_handleAuthAck(evt.data) === true) {
+                                return; // consumed by auth handler
+                            }
+                        }
+                        const p_jmsg = Me.#prv_parseJSONMessage(evt.data);
+                        switch (p_jmsg._ty) {
+                            case CMDTYPE_SYS: Me.#prv_parseSystemMessage(Me, p_jmsg);
+                                break;
+
+                            case CMD_COMM_GROUP:
+                            case CMD_COMM_INDIVIDUAL:
+                                // TASK-02: fn_handleFrame handles all migrated JSON
+                                // message types via the pure decode/reduce/effects
+                                // pipeline. Unmigrated types are logged (dev mode)
+                                // and silently dropped — the old switch is gone.
+                                fn_handleFrame(p_jmsg, evt);
+                                break;
+                        }
+                        // js_common.fn_console_log('msg:' + JSON.stringify(p_jmsg)); // Disable in production for perf
+                    } else {
+
+                        Me.#prv_extractBinaryPacket(evt);
+                    } // else-if
+                };
+
+                // OnClose callback of websocket
+                this.ws.onclose = function (evt) {
+                    Me.m_authPending = false;
+                    if (Me.m_authTimeoutHandle) {
+                        clearTimeout(Me.m_authTimeoutHandle);
+                        Me.m_authTimeoutHandle = null;
+                    }
+                    Me.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_DISCONNECTED);
+                    js_eventEmitter.fn_dispatch(js_event.EE_WS_CLOSE, null);
+
+                    try {
+                        console.warn('[WS] close', {
+                            host: Me.m_server_ip,
+                            port: Me.m_server_port,
+                            code: evt ? evt.code : null,
+                            reason: evt ? evt.reason : null,
+                            wasClean: evt ? evt.wasClean : null,
+                        });
+                    } catch {
+                    }
+                };
+
+                this.ws.onerror = function (err) {
+                    Me.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_ERROR);
+
+                    try {
+                        console.error('[WS] error', {
+                            host: Me.m_server_ip,
+                            port: Me.m_server_port,
+                            err: err,
+                        });
+                    } catch {
+                    }
+
+                    // Check if this is likely an SSL certificate error
+                    Me.#prv_handleSSLError(err);
+                };
+            } else { // The browser doesn't support WebSocket
+                fn_do_modal_alert(null, "WebSocket NOT supported by your Browser!");
+            }
+        }
+        catch (e) {
+            console.error("WebSocket initialization error:", e);
+            if (e.message.includes("SSL") || e.message.includes("TLS")) {
+                fn_do_modal_alert(null, "SSL/TLS error detected. Please check your certificate configuration.");
+            }
+            console.log("Web Socket Failed");
+            console.log(e);
+            this.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_ERROR);
+        }
+    };
+
+    /**
+     * Security item 2.1: build and send the auth frame as the first WS message
+     * after onopen. The frame carries the session auth key (f), party ID (s),
+     * actor type (at) and optional plugin API key (k) out of the URL query
+     * string so they do not leak into proxy/access logs or browser history.
+     *
+     * Server-side requirement: the Communication Server / WebConnector plugin
+     * must accept a connection with no query-string credentials, read this
+     * frame, validate f/s/at/k, and reply with:
+     *   {"ty":"s","mt":"de_auth_ack","r":"ok"}      (success)
+     *   {"ty":"s","mt":"de_auth_ack","r":"fail","em":"<reason>"}  (failure)
+     */
+    #fn_sendAuthFrame(pluginApiKey) {
+        const authFrame = {
+            ty: CMDTYPE_SYS,
+            mt: CMD_SYS_DE_AUTH,
+            f: this.server_AuthKey,
+            s: this.partyID,
+            at: 'g',
+        };
+        if (pluginApiKey && pluginApiKey.length > 0) {
+            authFrame.k = pluginApiKey;
+        }
+
+        this.m_authPending = true;
+
+        // Timeout: if no auth-ack arrives, close the socket.
+        const Me = this;
+        this.m_authTimeoutHandle = setTimeout(function () {
+            if (Me.m_authPending === true) {
+                console.error('[WS] auth frame timeout \u2014 no de_auth_ack received');
+                Me.m_authPending = false;
+                try { Me.ws.close(); } catch (e) { /* ignore */ }
+            }
+        }, CONST_AUTH_FRAME_TIMEOUT);
+
+        // Send the frame directly via the raw WebSocket (bypasses the class
+        // sendex guard which blocks while m_authPending is true).
+        try {
+            this.ws.send(JSON.stringify(authFrame));
+        } catch (e) {
+            console.error('[WS] failed to send auth frame:', e);
+            this.m_authPending = false;
+            if (this.m_authTimeoutHandle) {
+                clearTimeout(this.m_authTimeoutHandle);
+                this.m_authTimeoutHandle = null;
+            }
+        }
+    }
+
+    /**
+     * Security item 2.1: handle the de_auth_ack frame received from the server.
+     * Returns true if the message was an auth-ack (consumed), false otherwise.
+     */
+    #fn_handleAuthAck(rawData) {
+        let parsed;
+        try {
+            parsed = JSON.parse(rawData);
+        } catch (e) {
+            return false;
+        }
+        if (parsed == null || parsed.ty !== CMDTYPE_SYS || parsed.mt !== CMD_SYS_DE_AUTH_ACK) {
+            return false;
+        }
+
+        this.m_authPending = false;
+        if (this.m_authTimeoutHandle) {
+            clearTimeout(this.m_authTimeoutHandle);
+            this.m_authTimeoutHandle = null;
+        }
+
+        if (parsed.r === 'ok') {
+            console.info('[WS] auth frame accepted');
+            this.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_CONNECTED);
+            this.setSocketStatus(js_andruavMessages.CONST_SOCKET_STATUS_REGISTERED);
+        } else {
+            const reason = parsed.em || 'auth rejected';
+            console.error('[WS] auth frame rejected:', reason);
+            try { this.ws.close(); } catch (e) { /* ignore */ }
+        }
+        return true;
+    }
+
+    fn_isRegistered() {
+        return (this.socketStatus === js_andruavMessages.CONST_SOCKET_STATUS_REGISTERED);
+
+    }
+
+};
+export const AndruavClientWS = CAndruavClientWS.getInstance();

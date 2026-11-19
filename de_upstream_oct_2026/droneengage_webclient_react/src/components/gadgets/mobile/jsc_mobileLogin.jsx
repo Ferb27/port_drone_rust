@@ -1,0 +1,399 @@
+import React from 'react';
+import * as js_session from '../../../js/state/session.js';
+
+import { EVENTS as js_event } from '../../../js/events/js_eventList.js';
+import EventBridge from '../../../js/hooks/EventBridge.jsx';
+import { js_andruavAuth } from '../../../js/protocol/auth/js_andruav_auth.js';
+import { js_localStorage } from '../../../js/state/js_localStorage.js';
+import { fn_connect, fn_logout, fn_showSecurityDialog } from '../../../js/app/js_main.js';
+
+import ClssAltcha from '../../micro_gadgets/jsc_altcha.jsx';
+
+const CONST_OFFLINE = 0;
+const CONST_IN_PROGRESS = 1;
+const CONST_ONLINE = 2;
+const CONST_FAILED = 3;
+
+class MobileLoginPanel extends React.Component {
+  constructor() {
+    super();
+    this.state = {
+      is_connected: CONST_OFFLINE,
+      accessCode: '',
+      recoveryCode: '',
+      errorMessage: '',
+      successMessage: '',
+      showGenPanel: false,
+    };
+
+    this.m_loginNameRef = React.createRef();
+    this.m_accessCodeRef = React.createRef();
+    this.m_recoveryRef = React.createRef();
+    this.m_altchaRef = React.createRef();
+    this.m_chk_fullctrl = React.createRef();
+    this.m_chk_readonlyctrl = React.createRef();
+    this.m_webConnectorRetried = false;
+
+    // Event subscriptions are owned by EventBridge siblings rendered
+    // below (see render()), which auto-unsubscribe on unmount via
+    // useEventSubscription.
+  }
+
+  componentWillUnmount() {
+    this.m_flag_mounted = false;
+    // Unsubscription is handled automatically by the EventBridge
+    // siblings (useEventSubscription) on unmount.
+  }
+
+  componentDidMount() {
+    this.m_flag_mounted = true;
+    const stored = js_localStorage.fn_getLoginName();
+    if (stored && this.m_loginNameRef.current) {
+      this.m_loginNameRef.current.value = stored;
+    }
+    const storedCode = js_localStorage.fn_getAccessCode();
+    if (storedCode && this.m_accessCodeRef.current) {
+      this.m_accessCodeRef.current.value = storedCode;
+    }
+    if (js_andruavAuth.fn_logined() === true) {
+      this.setState({ is_connected: CONST_ONLINE });
+    }
+  }
+
+  fn_onSocketStatus(params) {
+    if (this.m_flag_mounted === false) return;
+    if (params.status === 'registered') {
+      this.setState({ is_connected: CONST_ONLINE, errorMessage: '', successMessage: '' });
+    } else {
+      this.setState({ is_connected: CONST_OFFLINE });
+    }
+  }
+
+  fn_onAuthInProgress() {
+    this.setState({ is_connected: CONST_IN_PROGRESS, errorMessage: '' });
+  }
+
+  fn_onAuthBad(data) {
+    if (this.m_flag_mounted === false) return;
+
+    // SSL errors get their own security dialog, mirroring jsc_login.jsx.
+    if (data && data.ssl === true) {
+      let host, port;
+      if (data.probedUrl) {
+        try {
+          const url = new URL(data.probedUrl);
+          host = url.hostname;
+          port = url.port || (url.protocol === 'https:' ? '443' : '80');
+        } catch (e) {
+          host = 'localhost';
+          port = '8080';
+        }
+      } else if (js_session.fn_getAndruavClient() && js_session.fn_getAndruavClient().v_auth) {
+        const authModule = js_session.fn_getAndruavClient().v_auth;
+        host = authModule.m_auth_ip;
+        port = authModule._m_auth_port;
+      } else {
+        host = 'localhost';
+        port = '8080';
+      }
+      fn_showSecurityDialog(host, port);
+      return;
+    }
+
+    this.setState({
+      is_connected: CONST_FAILED,
+      errorMessage: data && data.em ? data.em : 'Login failed',
+      successMessage: '',
+    });
+  }
+
+  fn_onWebConnectorNotRunning() {
+    if (this.m_flag_mounted === false) return;
+    // Auto-fallback: WebConnector plugin (127.0.0.1:9211) is not available on this
+    // device (typical for mobile/Android). Silently disable it and retry with cloud
+    // login instead of showing a modal dialog — better UX on touch devices.
+    if (this.m_webConnectorRetried === true) return;
+    this.m_webConnectorRetried = true;
+    js_localStorage.fn_setWebConnectorEnabled(false);
+    if (this.m_loginNameRef.current && this.m_accessCodeRef.current) {
+      const email = this.m_loginNameRef.current.value.trim();
+      const accessCode = this.m_accessCodeRef.current.value.trim();
+      if (email && accessCode) {
+        fn_connect(email, accessCode);
+      }
+    }
+  }
+
+  fn_onAccessCodeGenerated(params) {
+    this.setState({
+      accessCode: params.accessCode || '',
+      recoveryCode: params.recoveryCode || '',
+      successMessage: 'Access code generated. Copy it — and save the Recovery Code shown below; it is the only way to regenerate if you lose the access code.',
+      errorMessage: '',
+    });
+  }
+
+  fn_onAccessCodeError(params) {
+    this.setState({
+      errorMessage: params && params.em ? params.em : 'Error generating access code',
+      successMessage: '',
+    });
+  }
+
+  /**
+   * Reads the solved ALTCHA payload from the widget. Payloads are
+   * single-use server-side, so the widget is reset after every read —
+   * the next submit needs a fresh solve.
+   * @returns {string|null} the payload, or null (error message set) when
+   * the widget has not verified yet.
+   */
+  fn_takeCaptchaPayload() {
+    const widget = this.m_altchaRef.current;
+    const payload = widget ? widget.fn_getPayload() : null;
+    if (!payload) {
+      this.setState({
+        errorMessage: 'Please wait for the captcha check to complete, then retry.',
+        successMessage: '',
+      });
+      return null;
+    }
+    widget.fn_reset();
+    return payload;
+  }
+
+  fn_clickLogin(e) {
+    if (e) e.preventDefault();
+    const email = this.m_loginNameRef.current.value.trim();
+    const accessCode = this.m_accessCodeRef.current.value.trim();
+    if (!email || !accessCode) {
+      this.setState({ errorMessage: 'Enter email and access code' });
+      return;
+    }
+    this.m_webConnectorRetried = false;
+    js_localStorage.fn_setLoginName(email);
+    js_localStorage.fn_setAccessCode(accessCode);
+    fn_connect(email, accessCode);
+  }
+
+  fn_clickLogout(e) {
+    if (e) e.preventDefault();
+    fn_logout();
+    this.setState({ is_connected: CONST_OFFLINE });
+  }
+
+  fn_clickGenerate(e) {
+    if (e) e.preventDefault();
+    const v_captchaPayload = this.fn_takeCaptchaPayload();
+    if (!v_captchaPayload) return;
+    const v_permission = '0xffffffff';
+    js_andruavAuth.fn_generateAccessCode(this.m_loginNameRef.current.value, v_permission, v_captchaPayload);
+  }
+
+  fn_clickRegenerate(e) {
+    if (e) e.preventDefault();
+    const v_accessCode = this.m_accessCodeRef.current ? this.m_accessCodeRef.current.value.trim() : '';
+    const v_recoveryCode = this.m_recoveryRef.current ? this.m_recoveryRef.current.value.trim() : '';
+    if (!v_accessCode && !v_recoveryCode) {
+      this.setState({ errorMessage: 'Regenerate requires your current Access Code or Recovery Code.' });
+      return;
+    }
+    const v_captchaPayload = this.fn_takeCaptchaPayload();
+    if (!v_captchaPayload) return;
+    // Regenerate rotates the existing credential; the requested
+    // permission is ignored server-side (stored permission preserved).
+    let v_permission = '0xffffffff';
+    if (this.m_chk_readonlyctrl.current && this.m_chk_readonlyctrl.current.checked) {
+      v_permission = '0xffff00ff';
+    }
+    js_andruavAuth.fn_regenerateAccessCode(this.m_loginNameRef.current.value, v_permission, v_accessCode, v_recoveryCode, v_captchaPayload);
+  }
+
+  fn_copyToClipboard() {
+    if (!this.state.accessCode) return;
+    navigator.clipboard.writeText(this.state.accessCode).then(() => {
+      this.setState({ successMessage: 'Access code copied to clipboard!' });
+    }, (err) => {
+      console.error('Could not copy: ', err);
+    });
+  }
+
+  fn_toggleGenPanel() {
+    const next = !this.state.showGenPanel;
+    this.setState({ showGenPanel: next });
+  }
+
+  render() {
+    const { is_connected, errorMessage, successMessage, accessCode, showGenPanel } = this.state;
+
+    if (is_connected === CONST_ONLINE) {
+      return (
+        <div className="mobile-login-panel">
+          <EventBridge eventName={js_event.EE_Auth_Account_Created} onEvent={(data) => this.fn_onAccessCodeGenerated(data)} />
+          <EventBridge eventName={js_event.EE_Auth_Account_BAD_Operation} onEvent={(data) => this.fn_onAccessCodeError(data)} />
+          <EventBridge eventName={js_event.EE_Auth_Account_Regenerated} onEvent={(data) => this.fn_onAccessCodeGenerated(data)} />
+          <EventBridge eventName={js_event.EE_Auth_Login_In_Progress} onEvent={() => this.fn_onAuthInProgress()} />
+          <EventBridge eventName={js_event.EE_Auth_BAD_Logined} onEvent={(data) => this.fn_onAuthBad(data)} />
+          <EventBridge eventName={js_event.EE_onSocketStatus} onEvent={(data) => this.fn_onSocketStatus(data)} />
+          <EventBridge eventName={js_event.EE_WebConnector_Not_Running} onEvent={() => this.fn_onWebConnectorNotRunning()} />
+          <div className="mobile-login-connected">
+            <i className="bi bi-check-circle-fill" style={{ fontSize: '2rem' }} />
+            <span>Connected</span>
+            <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
+              {js_localStorage.fn_getLoginName()}
+            </span>
+          </div>
+          <button
+            className="mobile-action-btn logout"
+            onClick={(e) => this.fn_clickLogout(e)}
+          >
+            <span className="mobile-btn-icon">
+              <i className="bi bi-box-arrow-right" />
+            </span>
+            Logout
+          </button>
+        </div>
+      );
+    }
+
+    const isConnecting = is_connected === CONST_IN_PROGRESS;
+
+    return (
+      <div className="mobile-login-panel">
+        <EventBridge eventName={js_event.EE_Auth_Account_Created} onEvent={(data) => this.fn_onAccessCodeGenerated(data)} />
+        <EventBridge eventName={js_event.EE_Auth_Account_BAD_Operation} onEvent={(data) => this.fn_onAccessCodeError(data)} />
+        <EventBridge eventName={js_event.EE_Auth_Account_Regenerated} onEvent={(data) => this.fn_onAccessCodeGenerated(data)} />
+        <EventBridge eventName={js_event.EE_Auth_Login_In_Progress} onEvent={() => this.fn_onAuthInProgress()} />
+        <EventBridge eventName={js_event.EE_Auth_BAD_Logined} onEvent={(data) => this.fn_onAuthBad(data)} />
+        <EventBridge eventName={js_event.EE_onSocketStatus} onEvent={(data) => this.fn_onSocketStatus(data)} />
+        <EventBridge eventName={js_event.EE_WebConnector_Not_Running} onEvent={() => this.fn_onWebConnectorNotRunning()} />
+        <div className="mobile-login-title">
+          {isConnecting ? 'Connecting...' : 'Login'}
+        </div>
+
+        {errorMessage && (
+          <div className="mobile-login-error">{errorMessage}</div>
+        )}
+        {successMessage && (
+          <div className="mobile-login-success">{successMessage}</div>
+        )}
+
+        <input
+          type="email"
+          ref={this.m_loginNameRef}
+          placeholder="Email / Login ID"
+          className="mobile-login-input"
+          disabled={isConnecting}
+        />
+        <input
+          type="password"
+          ref={this.m_accessCodeRef}
+          placeholder="Access Code"
+          className="mobile-login-input"
+          disabled={isConnecting}
+        />
+
+        {accessCode && (
+          <div className="mobile-login-accesscode-box">
+            <label>Generated Access Code:</label>
+            <div className="mobile-login-accesscode-row">
+              <input
+                type="text"
+                className="mobile-login-input"
+                value={accessCode}
+                readOnly
+              />
+              <button
+                className="mobile-login-copy-btn"
+                onClick={() => this.fn_copyToClipboard()}
+              >
+                <i className="bi bi-clipboard" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {this.state.recoveryCode && (
+          <div className="mobile-login-accesscode-box">
+            <label>Recovery Code (save it — shown once):</label>
+            <input
+              type="text"
+              className="mobile-login-input"
+              value={this.state.recoveryCode}
+              readOnly
+            />
+          </div>
+        )}
+
+        <button
+          className="mobile-action-btn login"
+          onClick={(e) => this.fn_clickLogin(e)}
+          disabled={isConnecting}
+        >
+          <span className="mobile-btn-icon">
+            <i className={`bi ${isConnecting ? 'bi-hourglass-split' : 'bi-box-arrow-in-right'}`} />
+          </span>
+          {isConnecting ? 'Connecting...' : 'Login'}
+        </button>
+
+        <button
+          className="mobile-login-gen-toggle"
+          onClick={() => this.fn_toggleGenPanel()}
+        >
+          <i className="bi bi-key" /> Need an Access Code?
+        </button>
+
+        {showGenPanel && (
+          <div className="mobile-login-gen-panel">
+            <div className="mobile-login-permissions">
+              <label>
+                <input
+                  type="radio"
+                  ref={this.m_chk_fullctrl}
+                  name="mob_permission"
+                  defaultChecked
+                />
+                Full Control
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  ref={this.m_chk_readonlyctrl}
+                  name="mob_permission"
+                />
+                Read Only
+              </label>
+            </div>
+
+            <input
+              type="password"
+              ref={this.m_recoveryRef}
+              placeholder="Recovery Code (only needed to Regenerate)"
+              className="mobile-login-input"
+            />
+
+            <div className="mobile-login-captcha">
+              <ClssAltcha ref={this.m_altchaRef} p_challengeUrl={js_andruavAuth.fn_getCaptchaChallengeUrl()} />
+            </div>
+
+            <div className="mobile-login-gen-buttons">
+              <button
+                className="mobile-login-gen-btn primary"
+                onClick={(e) => this.fn_clickGenerate(e)}
+              >
+                <i className="bi bi-download" /> Generate
+              </button>
+              <button
+                className="mobile-login-gen-btn secondary"
+                onClick={(e) => this.fn_clickRegenerate(e)}
+              >
+                <i className="bi bi-arrow-repeat" /> Regenerate
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+}
+
+export default MobileLoginPanel;

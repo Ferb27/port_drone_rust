@@ -1,0 +1,89 @@
+#ifndef CUDPROXY_H
+
+#define CUDPROXY_H
+
+#include <thread>         // std::thread
+#include <mutex>          // std::mutex, std::unique_lock
+#include <chrono>
+
+#ifndef MAXLINE
+#define MAXLINE 65507 
+#endif
+
+namespace de
+{
+namespace comm
+{
+class CUDPProxy;
+class CCallBack_UdpProxy
+{
+    public:
+
+        virtual void OnMessageReceived (const de::comm::CUDPProxy * udp_proxy, const char * message, int len) {};
+        virtual void OnConnected (const bool& connected) {};
+};
+
+class CUDPProxy
+{
+
+   public:
+
+        CUDPProxy()
+        {
+            
+        }
+        
+        ~CUDPProxy ();
+        
+    public:
+        
+        bool init(const char * targetIP, int broadcatsPort, const char * host, int listenningPort);
+        void setCallback (CCallBack_UdpProxy * callback_udp_proxy)
+        {
+            m_callback_udp_proxy = callback_udp_proxy;
+        }
+        void start();
+        void stop();
+        void sendMSG(const char * msg, const int length);
+
+        bool isStarted() const { return m_starrted;}
+
+
+    protected:
+        
+        void closeSockets();
+        void startReceiver();
+
+        void InternalReceiverEntry();
+        struct sockaddr_in  *m_udpProxyServer = nullptr; 
+        struct sockaddr_in  *m_ModuleAddress = nullptr; 
+        int m_SocketFD = -1; 
+        std::thread m_threadCreateUDPSocket;
+        pthread_t m_thread;
+
+        std::string m_JsonID;
+        void (*m_OnReceive)(const char *, int len) = nullptr;
+
+    protected:
+        bool m_starrted = false;
+        bool m_stopped_called = false;
+        std::mutex m_lock;  
+
+        char buffer[MAXLINE]; 
+
+        CCallBack_UdpProxy * m_callback_udp_proxy = nullptr;
+        
+        static constexpr int UDP_RCV_TIMEOUT_MS = 1500;
+        static constexpr int UDP_SND_TIMEOUT_MS = 1500;
+        static constexpr int UDP_KEEPALIVE_MS   = 15000;
+        static constexpr int UDP_BUF_SIZE       = 4 * 1024 * 1024;
+        std::chrono::steady_clock::time_point m_last_keepalive = std::chrono::steady_clock::now();
+        bool m_dns_resolved = false;
+        bool setupSocketOptions();
+        void sendKeepAlive();
+        
+};
+}
+}
+
+#endif

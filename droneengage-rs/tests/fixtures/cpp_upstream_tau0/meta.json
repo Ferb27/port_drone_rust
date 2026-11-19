@@ -1,0 +1,21 @@
+{
+ "name": "cpp_upstream_tau0",
+ "lines": {
+  "databus": 7492,
+  "fcb": 6432,
+  "wss": 8539
+ },
+ "binaries": [
+  "comm=/tmp/de_up/comm/bin/de_comm mav=/tmp/de_up/mav/bin/de_ardupilot",
+  "fc1bd8c390302a5d3d370107ace14242c3e0099f7c578e829588e16d075455a2  /tmp/de_up/comm/bin/de_comm",
+  "c7dffb87b9dc96236671706dfdedc49ac31e42347b79a736fc4795d6f1a8f4df  /tmp/de_up/mav/bin/de_ardupilot"
+ ],
+ "gate": [
+  "sitl1 (idx 0): n=1035 mean=33.04 m RMS=34.43 p50=34.74 p95=40.20 max=40.38",
+  "   window 20-65s: mean=39.90 m  max=40.38",
+  "   window 100-125s: mean=35.02 m  max=36.06",
+  "sitl2 (idx 1): n=1035 mean=38.13 m RMS=39.22 p50=40.09 p95=44.65 max=44.84",
+  "   window 20-65s: mean=39.84 m  max=40.38",
+  "   window 100-125s: mean=44.47 m  max=44.63"
+ ]
+}

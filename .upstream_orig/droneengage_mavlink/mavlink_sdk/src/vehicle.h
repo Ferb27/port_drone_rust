@@ -1,0 +1,629 @@
+  #ifndef VEHICLE_H_
+#define VEHICLE_H_
+
+#include <map>
+#include <cstdint>
+
+#include <all/mavlink.h>
+#include <ardupilotmega/ardupilotmega.h>
+
+#include "mavlink_helper.h"
+#include "tlog/mavlink_tlog.hpp"
+
+#define NO_SYSID_RESTRICTION 0
+
+namespace mavlinksdk
+{
+    // 3 seconds
+    #define HEART_BEAT_TIMEOUT      3000000l
+    #define DISTANCE_SENSOR_TIMEOUT 5000 // ms
+    
+    // Data stream request constants
+    #define DATA_STREAM_REQUEST_HEARTBEAT_COUNT    3
+    #define DATA_STREAM_REQUEST_TIME_WINDOW        3000000l  // 3 seconds in microseconds
+
+    typedef struct LOCATION_3D
+    {
+        double latitude;
+        double longitude;
+        double altitude;
+    } LOCATION_3D;
+
+    /**
+     * @brief list of messages received from mavlink channel.
+     * This structure handles timing and processed flags for each message_id.
+     * 
+     */
+    struct Time_Stamps
+    {
+        #define TIME_STAMP_MSG_LEN 0xFFFF
+        #define MESSAGE_UNPROCESSED     0
+        #define MESSAGE_PROCESSED       1
+
+        Time_Stamps()
+        {
+            reset_timestamps();
+        }
+
+        void setTimestamp (uint16_t message_id, uint64_t time_stamp)
+        {
+            if (message_id >= TIME_STAMP_MSG_LEN) return ;
+            m_message_id[message_id] = time_stamp;
+            m_pocessed_flag[message_id] = MESSAGE_UNPROCESSED;
+        }
+
+        uint64_t getMessageTime(uint16_t message_id) const
+        {
+            if (message_id >= TIME_STAMP_MSG_LEN) return 0;
+            return m_message_id[message_id];
+        }
+
+        uint16_t getProcessedFlag(uint16_t message_id) const
+        {
+            if (message_id >= TIME_STAMP_MSG_LEN) return 0;
+            return m_pocessed_flag[message_id];
+        }
+
+        void setProcessedFlag(uint16_t message_id, uint16_t flags)
+        {
+            if (message_id >= TIME_STAMP_MSG_LEN) return ;
+            m_pocessed_flag[message_id] = flags;
+        }
+
+        void reset_timestamps()
+        {
+            for (uint16_t i=0; i< TIME_STAMP_MSG_LEN; ++i)
+            {
+               m_message_id[i] = 0;
+               m_pocessed_flag[i] = MESSAGE_UNPROCESSED;
+            }
+        }
+
+        private: 
+            uint64_t m_message_id[TIME_STAMP_MSG_LEN];
+            uint16_t m_pocessed_flag [TIME_STAMP_MSG_LEN];
+        
+        #undef TIME_STAMP_MSG_LEN
+
+    };
+
+
+    
+
+
+
+    class CCallBack_Vehicle
+    {
+        public:
+
+        virtual void OnBoardRestarted ()                                                                                                {};
+        virtual void OnHeartBeat_First (const mavlink_heartbeat_t& heartbeat)                                                           {};
+        virtual void OnHeartBeat_Resumed (const mavlink_heartbeat_t& heartbeat)                                                         {};
+        virtual void OnArmed (const bool& armed, const bool& ready_to_arm)                                                              {};
+        virtual void OnFlying (const bool& isFlying)                                                                                    {};
+        virtual void OnACK (const int& acknowledged_cmd, const int& result, const std::string& result_msg)                              {};
+        virtual void OnStatusText (const std::uint8_t& severity, const std::string& status)                                             {};
+        virtual void OnModeChanges(const uint32_t& custom_mode, const int& firmware_type, const MAV_AUTOPILOT& autopilot)               {};
+        virtual void OnHomePositionUpdated(const mavlink_home_position_t& home_position)                                                {};
+        virtual void OnServoOutputRaw(const mavlink_servo_output_raw_t& servo_output_raw, const bool& changed)                          {};
+        virtual void OnHighLatencyModeChanged (const int& latency_mode)                                                                 {};
+        virtual void OnHighLatencyMessageReceived (const int& latency_mode)                                                             {};
+        virtual void OnEKFStatusReportChanged (const mavlink_ekf_status_report_t& ekf_status_report)                                    {};
+        virtual void OnVibrationChanged (const mavlink_vibration_t& vibration)                                                          {};
+        virtual void OnADSBVechileReceived (const mavlink_adsb_vehicle_t& adsb_vehicle)                                                 {};
+        virtual void OnDistanceSensorChanged (const mavlink_distance_sensor_t& distance_sensor)                                            {};
+    };
+
+    class CVehicle
+    {
+        
+        public:
+            //https://stackoverflow.com/questions/1008019/c-singleton-design-pattern
+            static CVehicle& getInstance()
+            {
+                static CVehicle instance;
+
+                return instance;
+            }
+
+            CVehicle(CVehicle const&)               = delete;
+            void operator=(CVehicle const&)         = delete;
+
+        
+            // Note: Scott Meyers mentions in his Effective Modern
+            //       C++ book, that deleted functions should generally
+            //       be public as it results in better error messages
+            //       due to the compilers behavior to check accessibility
+            //       before deleted status
+
+        private:
+
+            CVehicle();
+
+        public:
+            
+            ~CVehicle ()
+            {
+
+            }
+
+        public:
+            inline const int& getSysId () const
+            {
+                return m_sysid;
+            }
+            inline const int& getCompId () const
+            {
+                return m_compid;
+            }
+
+            inline const int& setSysId (const int& sysid) 
+            {
+                m_sysid = sysid;
+            }
+            inline const int& setCompId (const int& compid) 
+            {
+                m_compid = compid;
+            }
+
+            inline const int& getGcsId () const
+            {
+                return m_gcs_id;
+            }
+            
+            inline const void setGcsId (const int& gcs_id) 
+            {
+                m_gcs_id = gcs_id;
+            }
+
+        public:
+
+            void set_callback_vehicle (mavlinksdk::CCallBack_Vehicle* callback_vehicle);
+            bool parseMessage (const mavlink_message_t& mavlink_message);
+            void enableLog (bool enabled);
+
+
+        protected:
+
+            bool handle_heart_beat              (const mavlink_heartbeat_t& heartbeat);
+            void handle_sys_status              (const mavlink_sys_status_t& sys_status);
+            void handle_extended_system_state   (const mavlink_extended_sys_state_t& extended_system_state);
+            void handle_cmd_ack                 (const mavlink_command_ack_t& command_ack);
+            void handle_status_text             (const mavlink_statustext_t& status_text);
+            void handle_home_position           (const mavlink_home_position_t& home_position);
+            void handle_param_ext_value         (const mavlink_param_ext_value_t& param_message);
+            void handle_param_value             (const mavlink_param_value_t& param_message);
+            void handle_adsb_vehicle            (const mavlink_adsb_vehicle_t& adsb_vehicle);
+            void handle_rc_channels_raw         (const mavlink_rc_channels_t& rc_channels);
+            void handle_servo_output_raw        (const mavlink_servo_output_raw_t& servo_output_raw);
+            void handle_system_time             (const mavlink_system_time_t& system_time);
+            void handle_radio_status            (const mavlink_radio_status_t& radio_status);
+            void handle_terrain_data_report     (const mavlink_terrain_report_t& terrain_report);
+            void handle_ekf_status_report       (const mavlink_ekf_status_report_t& ekf_status_report);
+            void handle_vibration_report        (const mavlink_vibration_t& vibration);
+            void handle_distance_sensor         (const mavlink_distance_sensor_t& distance_sensor);
+            
+            void handle_high_latency            (const int message_id);
+            void exit_high_latency              ();
+            
+            void requestDataStream();
+        
+
+        // Vechile Methods
+        public:
+            const bool isFCBConnected() const;
+
+            inline const uint64_t getMessageTime(uint16_t message_id) const
+            {
+                return time_stamps.getMessageTime(message_id);
+            }
+
+            inline const uint64_t getProcessedFlag(uint16_t message_id) const
+            {
+                return time_stamps.getProcessedFlag(message_id);
+            }
+
+            /**
+             * @brief DETERMINES if the last message of type message_id from mavlink 
+             * has been processed or not.
+             */
+            inline void setProcessedFlag(uint16_t message_id, uint16_t flags)
+            {
+                return time_stamps.setProcessedFlag(message_id, flags);
+            }
+
+            inline const bool isArmed() const
+            {
+                return m_armed;
+            }
+
+            inline const bool isFlying() const
+            {
+                return m_is_flying;
+            } 
+
+            inline const bool hasLidarAltitude() const 
+            {
+                return m_has_lidar_altitude;
+            }
+
+            inline const mavlink_heartbeat_t& getMsgHeartBeat () const
+            {
+                return m_heartbeat;
+            }
+
+            inline const mavlink_sys_status_t& getMsgSysStatus () const
+            {
+                return m_sys_status;
+            }
+
+            
+            inline const mavlink_battery_status_t& getMsgBatteryStatus () const
+            {
+                return m_battery_status;
+            }
+
+            inline const mavlink_battery2_t& getMsgBattery2Status () const
+            {
+                return m_battery2;
+            }
+
+            inline const int getHighLatencyMode () const
+            {
+                return m_high_latency_mode;
+            }
+
+            inline const mavlink_high_latency_t& getHighLatency () const
+            {
+                return m_high_latency;
+            }
+
+            inline const mavlink_high_latency2_t& getHighLatency2 () const
+            {
+                return m_high_latency2;
+            }
+
+            inline const mavlink_local_position_ned_t& getMsgLocalPositionNED () const
+            {
+                return m_local_position_ned;
+            }
+
+            inline const mavlink_global_position_int_t& getMsgGlobalPositionInt () const
+            {
+                return m_global_position_int;
+            }
+
+            inline const mavlink_position_target_local_ned_t& getMsgTargetPositionLocalNED () const
+            {
+                return m_position_target_local_ned;
+            }
+
+            inline const mavlink_position_target_global_int_t& getMsgTargetPositionGlobalInt () const
+            {
+                return m_position_target_global_int;
+            }
+
+            inline const mavlink_gps_raw_int_t& getMSGGPSRaw () const
+            {
+                return m_gps_raw_int;
+            }
+
+            inline const mavlink_gps2_raw_t& getMSGGPS2Raw () const
+            {
+                return m_gps2_raw;
+            }
+
+            inline const mavlink_attitude_t& getMsgAttitude () const
+            {
+                return m_attitude;
+            }
+
+            inline const mavlink_vfr_hud_t& getMsgVFRHud () const
+            {
+                return m_vfr_hud;
+            }
+
+            inline const mavlink_wind_t& getMsgWind () const
+            {
+                return m_wind;
+            }
+
+            inline const mavlink_distance_sensor_t& getDistanceSensor (uint8_t direction)
+            {
+                return m_distance_sensors[direction];
+            }
+
+            inline const mavlink_distance_sensor_t& getLidarAltitude()
+            {
+                return m_distance_sensors[MAV_SENSOR_ORIENTATION::MAV_SENSOR_ROTATION_PITCH_270];
+            }
+
+            inline const mavlink_home_position_t& getMsgHomePosition () const
+            {
+                return m_home_position;
+            }
+
+            inline const mavlink_nav_controller_output_t& getMsgNavController() const
+            {
+                return m_nav_controller;
+            }
+
+            inline const mavlink_adsb_vehicle_t& getADSBVechile() const 
+            {
+                return m_adsb_vehicle;
+            }
+
+            inline const mavlink_rc_channels_t& getRCChannels () const
+            {
+                return m_rc_channels;
+            }
+
+            inline const mavlink_servo_output_raw_t& getServoOutputRaw () const 
+            {
+                return m_servo_output_raw;
+            }
+
+            inline const mavlink_system_time_t& getSystemTime() const 
+            {  
+                return m_system_time;
+            }
+
+            inline const mavlink_radio_status_t& getRadioStatus() const 
+            {
+                return m_radio_status;
+            }
+
+            inline const mavlink_terrain_report_t& getTerrainReport() const 
+            {  
+                return m_terrain_report;
+            }
+
+            inline const mavlink_ekf_status_report_t& getEkf_status_report() const 
+            {
+                return m_ekf_status_report;   
+            }
+
+            inline const mavlink_vibration_t& getVibration() const 
+            {
+                return m_vibration;   
+            }
+
+            inline const mavlink_flight_information_t getFlightInformation() const
+            {
+                return m_flight_information;
+            }
+
+            inline const std::string& getLastStatusText () const
+            {
+                return m_status_text;
+            }
+
+            /**
+             * True if prechecked all passed.
+             * info already exists in m_sys_status
+             */
+            inline const bool isReadyToArm() const 
+            {
+                return (m_sys_status.onboard_control_sensors_health & MAV_SYS_STATUS_PREARM_CHECK) != 0;
+            }
+
+            /**
+             * Motor can be locked or enabled.
+             * info already exists in m_sys_status
+             */
+            inline const bool isMotorEnabled() const 
+            {
+                return MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS
+                    & m_sys_status.onboard_control_sensors_enabled 
+                    & m_sys_status.onboard_control_sensors_health;
+            }
+
+            inline const void restrictMessageToSysID(uint32_t sys_id)
+            {
+                // value = 0  means no restriction.
+                m_sys_id = sys_id;
+            }
+
+            inline const void restrictMessageToCompID(uint32_t comp_id)
+            {
+                // value = 0  means no restriction.
+                m_comp_id = comp_id;
+            }
+
+
+            inline const LOCATION_3D getPositionforChangeAltitude()
+            {
+                LOCATION_3D location_3d;
+                const mavlink_nav_controller_output_t& nav_controller = getMsgNavController();
+                    
+                if ((nav_controller.wp_dist > 0) && (m_last_guided_mode_point_valid))
+                {
+                    
+                    std::cout << "getPositionforChangeAltitude nav_controller.wp_dist > 0" << std::endl;
+                    
+                    return m_last_guided_mode_point;
+
+                }
+                else
+                {
+                    // use current position
+                    std::cout << "getPositionforChangeAltitude nav_controller. getMsgGlobalPositionInt" << std::endl;
+                    
+                    const mavlink_global_position_int_t& mavlink_global_position_int = getMsgGlobalPositionInt();
+                    location_3d.latitude = mavlink_global_position_int.lat;
+                    location_3d.longitude = mavlink_global_position_int.lon ;
+                    
+                    location_3d.altitude = mavlink_global_position_int.alt;
+                    
+	
+                }
+                return location_3d;
+            }
+
+            inline void setGuidedPoint(const double& latitude, const double& longitude, const double& relative_altitude)
+            {
+                std::cout << "setGuidedPoint" << std::endl;
+                m_last_guided_mode_point.latitude = latitude* 1e7;
+                m_last_guided_mode_point.longitude = longitude* 1e7;
+                m_last_guided_mode_point.altitude = relative_altitude;
+                m_last_guided_mode_point_valid = true;
+            }
+            
+        // Class Members
+        protected:
+            mavlinksdk::CCallBack_Vehicle* m_callback_vehicle;
+            bool m_heart_beat_first_recieved = false;
+            
+            // Data stream request tracking
+            uint32_t m_consecutive_heartbeat_count = 0;
+            uint64_t m_last_non_heartbeat_time = 0;
+            uint64_t m_heartbeat_sequence_start_time = 0;
+
+
+        // Vehicle Attributes
+        protected:
+            // Heartbeat
+            mavlink_heartbeat_t m_heartbeat;
+
+            // System Status
+            mavlink_sys_status_t m_sys_status;
+
+            // Battery Status
+            /**
+             * @brief 
+             *  voltage in x1000 array of 10
+             *  current in x100
+             *  temprature in x 1000
+             */
+            mavlink_battery_status_t m_battery_status;
+
+            /**
+             * @brief 
+             * only battery voltage
+             */
+            mavlink_battery2_t m_battery2;
+
+
+            mavlink_flight_information_t m_flight_information;
+            
+            // High Latency
+            int m_high_latency_mode = 0; // either equal to MAVLINK_MSG_ID_HIGH_LATENCY or MAVLINK_MSG_ID_HIGH_LATENCY2 or 0
+            mavlink_high_latency_t m_high_latency;
+            mavlink_high_latency2_t m_high_latency2;
+
+            // Local Position
+            mavlink_local_position_ned_t m_local_position_ned;
+
+            // Global Position
+            mavlink_global_position_int_t m_global_position_int;
+
+            // Local Position Target
+            mavlink_position_target_local_ned_t m_position_target_local_ned;
+
+            // Global Position Target
+            mavlink_position_target_global_int_t m_position_target_global_int;
+
+            // GPS Raw
+            mavlink_gps_raw_int_t m_gps_raw_int;
+
+            // GPS 2 Raw
+            mavlink_gps2_raw_t m_gps2_raw;
+
+            // HiRes IMU
+            mavlink_highres_imu_t m_highres_imu;
+
+            // Attitude
+            mavlink_attitude_t m_attitude;
+
+            // Attitude
+            mavlink_vfr_hud_t m_vfr_hud;
+
+            // Wind
+            mavlink_wind_t m_wind;
+
+            /**
+            * @brief store all MAV_SENSOR_ORIENTATION predefined directions.
+            * Distance Sensors
+            */
+            mavlink_distance_sensor_t m_distance_sensors[MAV_SENSOR_ROTATION_ROLL_90_PITCH_315 + 1];
+
+            // System Parameters?
+
+            // Home Position
+            mavlink_home_position_t m_home_position;
+
+            // Desired (pitch, roll, yaw, wp_dist, alt_error)
+            mavlink_nav_controller_output_t m_nav_controller;
+
+            //ADSB
+            mavlink_adsb_vehicle_t  m_adsb_vehicle;
+            
+            // RCChannels
+            mavlink_rc_channels_t   m_rc_channels;
+
+            //Servo Output Raw
+            mavlink_servo_output_raw_t   m_servo_output_raw;
+            
+            // System Time
+            mavlink_system_time_t  m_system_time;
+
+            // Radio Status
+            mavlink_radio_status_t m_radio_status;
+
+            // terrain report
+            mavlink_terrain_report_t m_terrain_report;
+
+            /**
+             * @brief 
+             * m_ekf_status_report.flags = EKF_STATUS_FLAGS contains status notification.
+             */
+            mavlink_ekf_status_report_t m_ekf_status_report; 
+
+            // efk status
+            mavlink_vibration_t m_vibration;
+            
+            /**
+             * @brief true if m_vibration.clipping increased 
+             * from last read.
+             */
+            bool m_clipping = false;
+
+            // Status Text
+            std::string m_status_text;
+            std::uint8_t m_status_severity =0;
+
+            // Time Stamps
+            Time_Stamps time_stamps;
+
+            LOCATION_3D m_last_guided_mode_point;
+            bool m_last_guided_mode_point_valid = false;
+            // Vehicle is armed
+            bool m_armed     = false;
+            // Flying or Diving => Armed Ready to take-off. It is not necessary physically flying
+            bool m_is_flying = false;
+
+            // Valid only with PX4
+            bool m_is_landing = false;
+            
+            bool m_has_lidar_altitude = false;
+
+            bool m_ready_to_arm_trigger_first_tick = false;
+            
+            mavlink_message_t mavlink_message_temp;
+
+            int m_sysid{0};
+            int m_compid{0};
+            int m_gcs_id{255};  // Default GCS ID
+
+            uint32_t m_sys_id{NO_SYSID_RESTRICTION};
+            uint32_t m_comp_id{NO_SYSID_RESTRICTION};
+
+            // TLOG logging
+            mavlinksdk::tlog::CMavlinkTlog m_tlog;
+            bool m_log_enabled{false};
+
+    };
+}
+
+
+#endif // VEHICLE_H_

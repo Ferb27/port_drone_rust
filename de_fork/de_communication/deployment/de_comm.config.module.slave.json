@@ -1,0 +1,50 @@
+{
+    /*
+        This is a JSON file with ability to add c-like comments.
+    */
+    
+    // A name and GUID for this module
+    "module_id"                 : "MT_SLAVE",
+    "unit_type"                 : "control_unit",
+    // IP & Port Communication Module is listening to.
+    "s2s_udp_listening_ip"      : "0.0.0.0",
+    "s2s_udp_listening_port"    : "61000",  
+    "s2s_udp_packet_size"       : "8192",
+
+    
+    // de_fork Communication Server Connection
+    "use_local_comm_server"        : true,    // use local comm server instead of main server
+    "auth_ip"                       : "127.0.0.1",
+    "auth_port"                     : 19408,
+    "auth_verify_ssl"               : false,
+    "local_comm_server_ip"          : "127.0.0.1",
+    "local_comm_server_port"        : 9967,
+    //this is optional if [auth_verify_ssl] == true and ssl-certificate is internal.
+    "root_certificate_path"     : "./root.crt",
+
+    "userName"                  :"", 
+    "accessCode"                :"mhefny",
+    "unitID"                    :"drone_cairo",
+    "groupID"                   :"1",
+    "unitDescription"           :"de_unit slave",
+
+    
+    // Logger Section
+    "logger_enabled"            : false,
+    "logger_debug"              : false,
+
+    // sometimes you need to reconnect the app when connection is silent and not timedout yet:
+    "ping_server_rate_in_ms": 1500,
+    "max_allowed_ping_delay_in_ms": 5000,
+
+    // "led_pins_enabled" is optional and default value is true                           
+    "led_pins_enabled" : true,
+   
+    
+    // "buzzer_pins_enabled" is optional and default value is true                           
+    "buzzer_pins_enabled" : true
+    
+    //"allow_temp":               cat /sys/class/thermal/thermal_zone0
+ 
+   
+}

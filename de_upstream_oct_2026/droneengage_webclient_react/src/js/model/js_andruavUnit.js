@@ -1,0 +1,1669 @@
+/*************************************************************************************
+ *
+ *   A N D R U A V - C L I E N T       JAVASCRIPT  LIB
+ *
+ *   Author: Mohammad S. Hefny
+ *
+ *   Date:   09 December 2015
+ *
+ *   Update: Date:   23 Jul 2016
+ *
+ *
+ *
+ *
+ *
+ *************************************************************************************/
+/*jshint esversion: 6 */
+
+import * as js_siteConfig from '../config/js_siteConfig.js';
+import * as js_session from '../state/session.js';
+import { CONST_DEFAULT_FLIGHTPATH_STEPS_COUNT, CONST_MAX_SDR_DETECTED_SIGNAL_LENGTH, CONST_MAX_SDR_SPECTRUM_LENGTH } from '../config/constants.js';
+import * as js_andruavMessages from "../protocol/messages/js_andruavMessages.js";
+import * as js_circularBuffer from "../helpers/js_circularBuffer.js";
+import { EVENTS as js_event } from '../events/js_eventList.js'
+import { js_eventEmitter } from '../events/js_eventEmitter.js'
+import { mavlink20 } from "../js_mavlink_v2.js";
+
+// Vehicle Types
+export const VEHICLE_UNKNOWN = 0;
+export const VEHICLE_TRI = 1;
+export const VEHICLE_QUAD = 2;
+export const VEHICLE_PLANE = 3;
+export const VEHICLE_ROVER = 4;
+export const VEHICLE_HELI = 5;
+export const VEHICLE_BOAT = 6;
+export const VEHICLE_SUBMARINE = 12;
+export const VEHICLE_GIMBAL = 15;
+export const VEHICLE_VTOL = 16;
+export const VEHICLE_BUS = 997;
+export const VEHICLE_PERSON = 998;
+export const CONST_VEHICLE_GCS = 999;
+export const CONTROL_UNIT = 10001;
+
+
+//m_enum_userStatus
+export const CONST_ALIVE = 1;
+export const CONST_SUSPECTED = 2;
+export const CONST_DISCONNECTED = 3;
+
+// VIDEORECORDING
+export const CONST_VIDEORECORDING_OFF = 0;
+export const CONST_VIDEORECORDING_ON = 1;
+export const CONST_VIDEOSTREAMING_OFF = 0;
+export const CONST_VIDEOSTREAMING_ON = 1;
+
+// Flight Control Modes
+export const CONST_FLIGHT_CONTROL_RTL = 2;
+// Flight Follow Me
+export const CONST_FLIGHT_CONTROL_FOLLOW_ME = 3;
+// param1:  Longitude:  Master position
+// param2:  Latitude
+// param3(opt):  Radius:             minimum approach to master.
+// param4(opt):  Offset_Longitude:   used to make a fleet formation
+// param5(opt):  Offset_Latitude:    used to make a fleet formation
+
+// Flight Follow A Unit... The message is sent to the Master Unit
+// and forwarded to the secondary one as a Follow_ME command.
+export const CONST_FLIGHT_CONTROL_FOLLOW_UNITED = 4;
+// UNIT_ID: unit to follow.
+// Below commands are forwarded to Slave
+// param1:  Longitude:  Master position
+// param2:  Latitude
+// param3(opt):  Radius:             minimum approach to master.
+// param4(opt):  Offset_Longitude:   used to make a fleet formation
+// param5(opt):  Offset_Latitude:    used to make a fleet formation
+
+// Flight Auto [Mission UAV]
+export const CONST_FLIGHT_CONTROL_AUTO = 5;
+export const CONST_FLIGHT_CONTROL_STABILIZE = 6;
+export const CONST_FLIGHT_CONTROL_ALT_HOLD = 7;
+export const CONST_FLIGHT_CONTROL_MANUAL = 8; // Manual
+export const CONST_FLIGHT_CONTROL_GUIDED = 9;
+export const CONST_FLIGHT_CONTROL_LOITER = 10;
+export const CONST_FLIGHT_CONTROL_POSTION_HOLD = 11;
+export const CONST_FLIGHT_CONTROL_LAND = 12;
+export const CONST_FLIGHT_CONTROL_CIRCLE = 13;
+export const CONST_FLIGHT_CONTROL_FBWA = 14;
+export const CONST_FLIGHT_CONTROL_CRUISE = 15;
+export const CONST_FLIGHT_CONTROL_FBWB = 16;
+export const CONST_FLIGHT_CONTROL_BRAKE = 17;
+export const CONST_FLIGHT_CONTROL_SMART_RTL = 21;
+export const CONST_FLIGHT_CONTROL_TAKEOFF = 22;
+export const CONST_FLIGHT_CONTROL_QHOVER = 23;
+export const CONST_FLIGHT_CONTROL_QLOITER = 24;
+export const CONST_FLIGHT_CONTROL_QSTABILIZE = 25;
+export const CONST_FLIGHT_CONTROL_QLAND = 26;
+export const CONST_FLIGHT_CONTROL_QRTL = 27;
+export const CONST_FLIGHT_CONTROL_ACRO = 28;
+export const CONST_FLIGHT_CONTROL_INITIALIZE = 99;
+export const CONST_FLIGHT_CONTROL_HOLD = 100;
+export const CONST_FLIGHT_CONTROL_SURFACE = 101;
+export const CONST_FLIGHT_MOTOR_DETECT = 102;
+export const CONST_FLIGHT_PX4_MANUAL = 200;
+export const CONST_FLIGHT_PX4_ALT_HOLD = 201;
+export const CONST_FLIGHT_PX4_AUTO_TAKEOFF = 202;
+export const CONST_FLIGHT_PX4_AUTO_MISSION = 203;
+export const CONST_FLIGHT_PX4_AUTO_HOLD = 204;
+export const CONST_FLIGHT_PX4_AUTO_RTL = 205;
+export const CONST_FLIGHT_PX4_AUTO_LAND = 206;
+export const CONST_FLIGHT_PX4_AUTO_FOLLOW_TARGET = 207;
+export const CONST_FLIGHT_PX4_AUTO_PRECLAND = 208;
+export const CONST_FLIGHT_PX4_VTOL_TAKEOFF = 209;
+export const CONST_FLIGHT_PX4_ACRO = 210;
+export const CONST_FLIGHT_PX4_STABILIZE = 211;
+export const CONST_FLIGHT_PX4_OFF_BOARD = 212;
+export const CONST_FLIGHT_PX4_RATTITUDE = 213;
+export const CONST_FLIGHT_PX4_POSCTL_POSCTL = 214;
+export const CONST_FLIGHT_PX4_POSCTL_ORBIT = 215;
+export const CONST_FLIGHT_CONTROL_GUIDED_NO_GPS = 1000;
+export const CONST_FLIGHT_CONTROL_UNKNOWN = 999;
+
+
+
+export function fn_getFullName(m_groupName, p_partyID) {
+  //return m_groupName.replace(" ","_") + "_X_" + partyID.replace(" ","_");
+
+  return p_partyID; // partyID is unique
+}
+
+
+class C_TRACKER_AI {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_object_list = [];
+  }
+
+
+  fn_addObjectClass(objectList) {
+    this.m_object_list = objectList;
+  }
+
+  fn_updateTrackerStatus(status) {
+    this.m_valid_unit_feedback = true;
+
+    switch (status) {
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_LOST:
+        this.m_detected = false;
+        this.m_active = true;
+        break;
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_DETECTED:
+        this.m_detected = true;
+        this.m_active = true;
+        break;
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_ENABLED:
+        this.m_active = true;
+        break;
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_STOPPED:
+        this.m_active = false;
+        this.m_detected = false;
+        break;
+    }
+  }
+
+}
+
+class C_Tracker {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    // updated from interface, or a feedback from the unit.
+    this.m_enable_gui_tracker = false;
+    this.m_valid_unit_feedback = false;
+    // updated from unit
+    this.m_detected = false;
+    // updated from unit
+    this.m_active = false;
+
+    this.m_camera_orientation = 0;
+    this.m_ai_driven = false;
+  }
+
+
+  fn_enableGUITracker(enabled) {
+    this.m_enable_gui_tracker = enabled;
+  }
+
+  fn_updateTrackerStatus(full_status) {
+    this.m_valid_unit_feedback = true;
+
+    const status = full_status.a;
+    this.m_camera_orientation = full_status.b;
+    this.m_ai_driven = full_status.c;
+    switch (status) {
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_LOST:
+        this.m_detected = false;
+        this.m_active = true;
+        this.m_enable_gui_tracker = true;
+        break;
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_DETECTED:
+        this.m_detected = true;
+        this.m_active = true;
+        this.m_enable_gui_tracker = true;
+        break;
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_ENABLED:
+        this.m_active = true;
+        this.m_enable_gui_tracker = true;
+        break;
+      case js_andruavMessages.CONST_TargetTracking_STATUS_TRACKING_STOPPED:
+        this.m_active = false;
+        this.m_detected = false;
+        this.m_enable_gui_tracker = false;
+        break;
+    }
+  }
+}
+
+/**
+ * Precision-landing module state (de_precland).
+ * Updated from CONST_TYPE_AndruavMessage_PRECLAND_STATUS payloads:
+ *   a: state (CONST_PRECLAND_STATUS_*)
+ *   b: processing fps
+ *   c: last reprojection RMSE in px
+ *   d: slant range in m
+ *   e: array of fused tag ids
+ *   f: gate reason code (CONST_PRECLAND_REASON_*)
+ *   g: calibration status (CONST_PRECLAND_CALIB_STATUS_*, optional)
+ *   h: calibration views captured (optional)
+ *   i: calibration views total (optional)
+ *   j: calibration RMS px (optional, on completion)
+ */
+class C_Precland {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_valid_unit_feedback = false;
+    // derived enable flag: module is enabled whenever state != DISABLED
+    this.m_enabled = false;
+    this.m_state = js_andruavMessages.CONST_PRECLAND_STATUS_DISABLED;
+    this.m_fps = 0;
+    this.m_rmse_px = null;
+    this.m_range_m = null;
+    this.m_tag_ids = [];
+    this.m_reason = null;
+    // calibration state (absent unless PRECLAND_ACTION_CALIBRATE was sent)
+    this.m_calib_status = null;
+    this.m_calib_views_cap = null;
+    this.m_calib_views_total = null;
+    this.m_calib_rms = null;
+  }
+
+  fn_updatePreclandStatus(status) {
+    if (status === null || status === undefined) return;
+    this.m_valid_unit_feedback = true;
+    this.m_state = status.a;
+    if (status.b != null) this.m_fps = status.b;
+    this.m_rmse_px = (status.c != null) ? status.c : null;
+    this.m_range_m = (status.d != null) ? status.d : null;
+    this.m_tag_ids = (status.e != null) ? status.e : [];
+    this.m_reason = (status.f != null) ? status.f : null;
+    this.m_enabled = (status.a !== js_andruavMessages.CONST_PRECLAND_STATUS_DISABLED);
+    // calibration fields are optional - only present during/after calibration
+    this.m_calib_status      = (status.g != null) ? status.g : null;
+    this.m_calib_views_cap   = (status.h != null) ? status.h : null;
+    this.m_calib_views_total = (status.i != null) ? status.i : null;
+    this.m_calib_rms         = (status.j != null) ? status.j : null;
+  }
+}
+
+class C_Obstacles {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_obstacles = [];
+  }
+
+  fn_addObstacle() {
+
+  }
+
+}
+class C_Sound {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    // Sound file library received from the sound module via
+    // CONST_TYPE_AndruavMessage_SOUND_LIST. Each entry: { n: name, f: file_path }.
+    this.m_files = [];
+  }
+}
+class C_Video {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_videoactiveTracks = {};
+    this.m_videoTracks = [];
+    this.m_total_transfer_bytes = 0;
+  }
+
+  // returns CONST_VIDEOSTREAMING_OFF is ALL tracks are OFF
+  fn_getVideoStreaming() {
+    const c_activeTracks = Object.keys(this.m_videoactiveTracks);
+    if (c_activeTracks.length === 0) {
+      // NO ACTIVE VIDEOS ARE DEFINED
+      return CONST_VIDEOSTREAMING_OFF;
+    }
+    const len = c_activeTracks.length;
+    for (let i = 0; i < len; ++i) {
+      if (
+        this.m_videoactiveTracks[c_activeTracks[i]].VideoStreaming ===
+        CONST_VIDEOSTREAMING_ON
+      ) {
+        // ONE TRACK IS ACTIVE
+        return CONST_VIDEOSTREAMING_ON;
+      }
+    }
+
+    return CONST_VIDEOSTREAMING_OFF;
+  }
+
+  supportFlashing(index) {
+    const track = this.m_videoTracks[index];
+    if (track === null || track === undefined) return false;
+
+    if (track.hasOwnProperty("s") === true) {
+      // new format
+      return track.s & js_andruavMessages.CONST_CAMERA_SUPPORT_FLASHING;
+    }
+    if (track.hasOwnProperty("f") === true) {
+      // both flashing & dual camera uses f field om Andruav
+      return track.f;
+    }
+    return false;
+  }
+
+  supportCameraSwitch(index) {
+    const track = this.m_videoTracks[index];
+    if (track === null || track === undefined) return false;
+
+    if (track.hasOwnProperty("s") === true) {
+      // new format
+      return track.s & js_andruavMessages.CONST_CAMERA_SUPPORT_DUAL_CAM;
+    }
+    if (track.hasOwnProperty("f") === true) {
+      // both flashing & dual camera uses f field om Andruav
+      return track.f;
+    }
+    return false;
+  }
+
+  supportZoom(index) {
+    const track = this.m_videoTracks[index];
+    if (track === null || track === undefined) return false;
+
+    if (track.hasOwnProperty("s") === true) {
+      // new format
+      return track.s & js_andruavMessages.CONST_CAMERA_SUPPORT_ZOOMING;
+    }
+    if (track.hasOwnProperty("z") === true) {
+      return track.f;
+    }
+    return false;
+  }
+
+  supportRotation(index) {
+    const track = this.m_videoTracks[index];
+    if (track === null || track === undefined) return false;
+
+    if (track.hasOwnProperty("s") === true) {
+      // new format
+      return track.s & js_andruavMessages.CONST_CAMERA_SUPPORT_ROTATION;
+    }
+    if (track.hasOwnProperty("z") === true) {
+      return track.f;
+    }
+    return false;
+  }
+
+  isAllActive() {
+    const c_activeTracks = Object.keys(this.m_videoactiveTracks);
+    if (
+      c_activeTracks.length === 0 ||
+      this.m_videoTracks.length > c_activeTracks.length
+    ) {
+      // NO ACTIVE VIDEOS ARE DEFINED OR NOT ALL ARE ACTIVE
+      return false;
+    }
+
+    const len = c_activeTracks.length;
+    let j = 0;
+    let i = 0;
+    for (i = 0; i < len; ++i) {
+      if (
+        this.m_videoactiveTracks[c_activeTracks[i]].VideoStreaming ===
+        CONST_VIDEOSTREAMING_ON
+      ) {
+        // ON TRACK IS ACTIVE
+        j += 1;
+      }
+    }
+
+    return j === i;
+  }
+
+  fn_getVideoRecording() {
+    const c_activeTracks = Object.keys(this.m_videoactiveTracks);
+
+    if (this.VideoRecording === CONST_VIDEOSTREAMING_ON) {
+      return CONST_VIDEOSTREAMING_ON;
+    }
+
+    if (c_activeTracks.length === 0) {
+      // NO ACTIVE VIDEOS ARE DEFINED
+      return CONST_VIDEOSTREAMING_OFF;
+    }
+    const len = c_activeTracks.length;
+    for (let i = 0; i < len; ++i) {
+      if (
+        this.m_videoactiveTracks[c_activeTracks[i]].VideoRecording ===
+        CONST_VIDEOSTREAMING_OFF
+      ) {
+        // ON TRACK IS ACTIVE
+        return CONST_VIDEOSTREAMING_ON;
+      }
+    }
+
+    return CONST_VIDEOSTREAMING_OFF;
+  }
+}
+
+class C_NavInfo {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.p_Location = {
+      alt_relative: null, // MAVLINK_MSG_ID_GLOBAL_POSITION_INT.relative_alt ... Altitude above ground - or baro alt if GPS is not available
+      alt_abs: null, // MAVLINK_MSG_ID_GLOBAL_POSITION_INT.alt  ... Altitude (MSL). Note that virtually all GPS modules provide both WGS84 and MSL.
+      air_speed: null, // MAVLINK_MSG_ID_VFR_HUD.airspeed ... Vehicle speed in form appropriate for vehicle type. For standard aircraft this is typically calibrated airspeed (CAS) or indicated airspeed (IAS) - either of which can be used by a pilot to estimate stall speed.
+      ground_speed: null, // MAVLINK_MSG_ID_VFR_HUD.ground_speed ... float (m/s) ... Note HIGH_LATENCY uses unit8 m/s*5
+    };
+    this.p_Orientation = {
+      roll: 0.0, // MAVLINK_MSG_ID_ATTITUDE.nav_roll ... rad ... Roll angle (-pi..+pi)
+      pitch: 0.0, // MAVLINK_MSG_ID_ATTITUDE.nav_pitch ... rad ... Pitch angle (-pi..+pi)
+      yaw: 0.0, // MAVLINK_MSG_ID_ATTITUDE.nav_yaw ... rad ... Yaw angle (-pi..+pi)
+      roll_speed: 0.0, // MAVLINK_MSG_ID_ATTITUDE.rollspeed ... float	rad/s	Roll angular speed
+      pitch_speed: 0.0, // MAVLINK_MSG_ID_ATTITUDE.pitchspeed ... float	rad/s	Pitch angular speed
+      yaw_speed: 0.0, // MAVLINK_MSG_ID_ATTITUDE.yawspeed ... float	rad/s	Yaw angular speed
+    };
+
+    this.p_Desired = {
+      nav_roll: 0.0, // MAVLINK_MSG_ID_NAV_CONTROLLER_OUTPUT.nav_roll 		float	 deg	Current desired roll
+      nav_pitch: 0.0, // MAVLINK_MSG_ID_NAV_CONTROLLER_OUTPUT.nav_pitch 		float	 deg	Current desired pitch
+      nav_bearing: 0.0, // MAVLINK_MSG_ID_NAV_CONTROLLER_OUTPUT.nav_bearing 	int16_t	 deg	Current desired heading
+    };
+
+    this._Target = {
+      target_bearing: 0.0, // MAVLINK_MSG_ID_NAV_CONTROLLER_OUTPUT.target_bearing  int16_t	 deg	Current desired waypoint/target
+      mission_state: mavlink20.MISSION_STATE_UNKNOWN, // (MISSION_STATE)
+      //mission_mode: 0  , // 0: Unknown, 1: In mission mode, 2: Suspended (not in mission mode).
+      wp_count: 0, // MAVLINK_MSG_ID_MISSION_COUNT.count
+      wp_dist: 0, // MAVLINK_MSG_ID_NAV_CONTROLLER_OUTPUT.wp_dist  		uint16_t  m		Distance to active waypoint
+      wp_num: 0, // MAVLINK_MSG_ID_MISSION_CURRENT.seq
+      alt_error: 0.0, // MAVLINK_MSG_ID_NAV_CONTROLLER_OUTPUT.alt_error 		float	  m		Current altitude error
+    };
+
+    this.p_UserDesired = {
+      m_NavSpeed: 0.0, // user desired speed..requested from web
+    };
+    // flight path as points (lng,lat,alt)
+    this.m_FlightPath = [];
+
+    Object.seal(this);
+  }
+}
+
+class C_GeoTags {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.p_HomePoint = { m_isValid: false };
+    this.p_DestinationPoint = {
+      m_isValid: false,
+      m_needsIcon: false,
+    };
+  }
+
+  fn_addHomePoint(p_lat, p_lng, p_altitude, p_radius_accuracy, p_altitude_accuracy) {
+    this.p_HomePoint.lat = p_lat;
+    this.p_HomePoint.lng = p_lng;
+    this.p_HomePoint.alt = p_altitude;
+    this.p_HomePoint.radius_accuracy = p_radius_accuracy;     // Radius Accuracy in meters
+    this.p_HomePoint.altitude_accuracy = p_altitude_accuracy; // Altitude Accuracy in meters
+    this.p_HomePoint.m_isValid = true;
+  }
+
+  fn_addDestinationPoint(p_lat, p_lng, p_alt, p_type) {
+    if (this.p_DestinationPoint.type !== p_type) {
+      // type has changed so we need a new icon.
+      this.p_DestinationPoint.m_needsIcon = true;
+      this.p_DestinationPoint.type = p_type;
+    }
+    this.p_DestinationPoint.lat = p_lat;
+    this.p_DestinationPoint.lng = p_lng;
+    this.p_DestinationPoint.alt = p_alt;
+    this.p_DestinationPoint.m_isValid = true;
+  }
+}
+
+class C_DetectedTargets {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_targets = { m_list: [] };
+    this.m_searchable_targets = {};
+  }
+}
+
+class C_FCBParameters {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_systemID = 0;
+    this.m_componentID = 0;
+    this.m_list = {};
+    this.m_list_by_index = {};
+    this.m_list_by_index_shadow = {};
+  }
+}
+class C_Swarm {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_isLeader = false;
+    this.m_formation_as_leader =
+      js_andruavMessages.CONST_TASHKEEL_SERB_NO_SWARM;
+    this.m_formation_as_follower =
+      js_andruavMessages.CONST_TASHKEEL_SERB_NO_SWARM;
+    this.m_following = null;
+
+    Object.seal(this);
+  }
+}
+
+class C_SignalStatus {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_websocket = false;
+    this.m_wifi = false;
+    this.m_mobile = false;
+    this.m_mobileSignalLevel = 0;
+    this.m_mobileNetworkType = 0;
+    this.m_mobileNetworkTypeRank = 0;
+    this.m_operatorName = '';
+    this.m_countryIso = '';
+    this.m_dataState = 0; // 0=disconnected, 1=connected, 2=roaming
+  }
+}
+class C_P2P {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_initialized = false;
+    this.m_address_1 = "";
+    this.m_address_2 = "";
+    this.m_wifi_channel = 0;
+    this.m_wifi_password = "";
+    this.m_firmware = "";
+    this.m_connection_type = js_andruavMessages.CONST_TYPE_UNKNOWN;
+    this.m_parent_address = "";
+    this.m_parent_connected = false;
+    this.m_logical_parent_address = "";
+    this.m_detected_bssid = {};
+    this.m_detected_node = {};
+    this.m_driver_connected = false;
+    // there is a p2p module available.
+    this.m_p2p_connected = false;
+    // there is a p2p module but p2p communication is paused.
+    this.m_p2p_disabled = true;
+
+    Object.seal(this);
+  }
+
+  fn_isMyMac(mac) {
+    if (mac === this.m_address_1 || mac === this.m_address_2) return true;
+
+    return false;
+  }
+}
+
+
+class C_SDR {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_initialized = false;
+    this.m_type = '';
+    this.m_center_frequency = 0.0;
+    this.m_interval = 0.0;
+    this.m_trigger_level = 0.0;
+    this.m_sample_rate = 0.0;
+    this.m_gain = 0.0;
+    this.m_driver = '';
+    this.m_driver_index = 0;
+    this.m_display_bars = 30;
+    this.m_status = js_andruavMessages.CONST_SDR_STATUS_NOT_CONNECTED;
+    this.m_available_drivers = {};
+    this.m_spectrum_data = [];
+    this.m_detectedSignal = [];
+    this.m_detectedSignal_new = false;
+
+    Object.seal(this);
+  }
+
+  getLastSpectrum() {
+    if (this.m_spectrum_data.length > 0) {
+      return this.m_spectrum_data[this.m_spectrum_data.length - 1];
+    } else {
+      return null;
+    }
+  }
+
+  addDetectedSignal(frequency, signal_value, longitude, latitude, altitude, relative_altitude, signal_direction) {
+    let reading =
+    {
+      frequency: frequency,
+      signal_value: signal_value,
+      longitude: longitude,
+      latitude: latitude,
+      altitude: altitude,
+      relative_altitude: relative_altitude,
+      signal_direction: signal_direction
+    }
+
+    Object.seal(reading);
+
+    this.m_detectedSignal.push(reading);
+    this.m_detectedSignal_new = true;
+    // Ensure the array length is within the maximum limit
+    if (this.m_detectedSignal.length > CONST_MAX_SDR_DETECTED_SIGNAL_LENGTH) {
+      this.m_detectedSignal = this.m_detectedSignal.slice(-CONST_MAX_SDR_DETECTED_SIGNAL_LENGTH);
+    }
+
+  }
+
+  getLastDetectedSignal() {
+    if (this.m_detectedSignal_new === true && this.m_detectedSignal.length > 0) {
+      this.m_detectedSignal_new = false;
+      return this.m_detectedSignal[this.m_detectedSignal.length - 1];
+    } else {
+      return null;
+    }
+  }
+
+  addSpectrumData(p_info, p_data) {
+    let spectrumData = {
+      frequency_min: p_info.fcm,
+      frequency_step: p_info.fcst,
+      time: p_info.tim,
+      spectrum_data: p_data
+    }
+
+    Object.seal(spectrumData);
+
+    this.m_spectrum_data.push(spectrumData); // Add the new data to the array
+
+    // Ensure the array length is within the maximum limit
+    if (this.m_spectrum_data.length > CONST_MAX_SDR_SPECTRUM_LENGTH) {
+      this.m_spectrum_data = this.m_spectrum_data.slice(-CONST_MAX_SDR_SPECTRUM_LENGTH);
+    }
+  }
+}
+
+class C_Servo {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_values = {};
+  }
+}
+
+class C_Power {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this._Mobile = {
+      p_Battery: {
+        p_hasPowerInfo: false,
+      },
+    };
+
+    this._FCB = {
+      p_Battery: {
+        p_hasPowerInfo: false,
+        FCB_BatteryVoltage: 0.0,
+        FCB_BatteryCurrent: 0.0,
+        FCB_BatteryRemaining: 0.0,
+        FCB_BatteryTemprature: 0.0,
+        FCB_TotalCurrentConsumed: 0.0,
+      },
+      p_Battery2: {
+        p_hasPowerInfo: false,
+        FCB_BatteryVoltage: 0.0,
+        FCB_BatteryCurrent: 0.0,
+        FCB_BatteryRemaining: 0.0,
+        FCB_BatteryTemprature: 0.0,
+        FCB_TotalCurrentConsumed: 0.0,
+      },
+    };
+  }
+}
+
+class C_Telemetry {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this._isActive = false;
+    this.m_isGCSBlocked = false;
+    this.manualTXBlockedSubAction = 0;
+    this.m_rxEngaged = false; // defined locally
+    this.m_telemetry_level = 0;
+    this.m_udpProxy_ip = null;
+    this.m_udpProxy_port = 0;
+    this.m_udpProxy_active = false;
+    this.m_udpProxy_paused = false;
+  }
+
+  fn_getManualTXBlockedSubAction() {
+    return this.manualTXBlockedSubAction; // defined by remote unit
+  }
+
+  fn_updateTelemetry(p_manualTXBlockedSubAction) {
+    this.manualTXBlockedSubAction = p_manualTXBlockedSubAction;
+    // if (manualTXBlockedSubAction === js_andruavMessages.CONST_RC_SUB_ACTION_RELEASED)
+    // {   // release rx if engaged
+    // 	//this.m_rxEngaged = false;
+    // }
+    // NOTICE STATUS MIGHT BE:
+    // CONST_RC_SUB_ACTION_JOYSTICK_CHANNELS but it could be controlled by another channel.
+  }
+}
+
+class C_GPS {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_isValid = false;
+    this.m_satCount = 0;
+  }
+}
+
+class C_Gimbal {
+  constructor(p_parent)
+  {
+    this.m_parent = p_parent;
+    this.m_roll = 0.0;
+    this.m_pitch = 0.0;
+    this.m_yaw = 0.0;
+    this.m_model = '';
+    this.m_lrf_distance=0.0;
+    this.m_lrf_time_s=-1;
+    
+  }
+
+  setModel(p_model)
+  {
+    this.m_model = p_model;
+  }
+
+  setOrientation (p_yaw, p_pitch, p_roll)
+  {
+    this.m_pitch = p_pitch;
+    this.m_yaw = p_yaw;
+    this.m_roll = p_roll;
+  }
+
+  setLRF (p_distance, p_seconds)
+  {
+    this.m_lrf_distance_m = p_distance;
+    this.m_lrf_time_s = p_seconds;
+  }
+
+  isValidLRF()
+  {
+    if ((this.m_lrf_distance < 0) ||
+      (this.m_lrf_time_s > 10))
+       return false;
+
+    return true;
+  }
+}
+
+export class C_TerrainEntry {
+  constructor(
+    lat = null,
+    lon = null,
+    spacing = null,
+    terrain_height,
+    current_height
+  ) {
+    this.m_lat = lat; // optional 	invalud = null
+    this.m_lon = lon; // optional 	invalud = null
+    this.m_spacing = spacing; //optional 	invalud = null
+    this.m_terrain_height = terrain_height; // m - Terrain height MSL
+    this.m_current_height = current_height; // m - Current vehicle height above lat/lon terrain height
+  }
+}
+class C_Terrain {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_isValid = false;
+    this._index = 0;
+    this.__terrain_entry = [];
+    this.last_terrain_entry = null;
+  }
+
+  add(terrain_entry) {
+    if (terrain_entry === null || terrain_entry === undefined) return;
+
+    this.last_terrain_entry = terrain_entry;
+    this.m_isValid = true;
+    // if (this._index ==100 ) this._index = 0;
+    // this.__terrain_entry.push(terrain_entry);
+    // this._index+=1;
+  }
+}
+
+class C_EKF {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_isValid = false;
+    this.m_velocity_variance = 0;
+    this.m_pos_horiz_variance = 0;
+    this.m_pos_vert_variance = 0;
+    this.m_compass_variance = 0;
+    this.m_terrain_alt_variance = 0;
+    this.m_airspeed_variance = 0;
+    this.m_flags = 0;
+
+    Object.seal(this);
+  }
+}
+
+class C_Vibration {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_isValid = false;
+    this.m_vibration_x = 0;
+    this.m_vibration_y = 0;
+    this.m_vibration_z = 0;
+    this.m_clipping_0 = 0;
+    this.m_clipping_1 = 0;
+    this.m_clipping_2 = 0;
+
+    Object.seal(this);
+  }
+}
+
+class C_DistanceSensor {
+  constructor(p_parent, p_orientation) {
+    this.m_parent = p_parent;
+    this.m_orientation = p_orientation; //MAV_SENSOR_ORIENTATION_ENUM_END
+    this.m_isValid = false;
+    this.m_last_access = null;
+    this.m_min_distance = 0;
+    this.m_max_distance = 0;
+    this.m_current_distance = 0;
+  }
+
+  update(p_mavlink_distance_sensor) {
+    this.m_orientation = p_mavlink_distance_sensor.orientation; //MAV_SENSOR_ORIENTATION_ENUM_END
+    this.m_isValid = true;
+    this.m_min_distance = p_mavlink_distance_sensor.min_distance;  // cm
+    this.m_max_distance = p_mavlink_distance_sensor.max_distance;  // cm
+    this.m_current_distance = p_mavlink_distance_sensor.current_distance;  // cm
+
+    const now = new Date();
+    this.m_last_access = now;
+
+    this.m_parent.m_last_access = now;
+  }
+
+}
+
+class C_LidarInfo {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_distance_sensors = [];
+    this.m_last_access = new Date();
+    this.m_any_valid = false;
+    for (let i = 0; i <= 40; ++i) {
+      this.m_distance_sensors.push(new C_DistanceSensor(this, i));
+    }
+  }
+
+  update(mavlink_distance_sensor) {
+    const orientation = mavlink_distance_sensor.orientation;
+
+    if (orientation >= 40) return;
+
+    this.m_distance_sensors[orientation].update(mavlink_distance_sensor);
+    this.m_any_valid = true;
+  }
+
+  get(p_orientation) {
+    return this.m_distance_sensors[p_orientation];
+  }
+
+  anyValidDataExists() {
+    const now = new Date();
+    return ((this.m_any_valid === true) && (now - this.m_last_access) < 5000);
+  }
+}
+
+class C_GPIO {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.m_gpios = {};
+  }
+
+  addGPIO(gpio_array) {
+    // Ensure gpio_array is an array
+    if (!Array.isArray(gpio_array)) {
+      console.error("Invalid input: gpio_array must be an array.");
+      return;
+    }
+
+    /*
+     Json_de json_gpio = {
+        {"i", gpio.plugin_id},
+        {"b", gpio.pin_number},
+        {"m", gpio.pin_mode},
+        {"t", gpio.gpio_type},
+        {"v", gpio.pin_value},
+        {"d", gpio.pwm_width}
+      };
+
+
+    * PIN_MODE
+    * *    INPUT			        0
+    * *    OUTPUT			        1
+    * *    PWM_OUTPUT		      2
+    * *    PWM_MS_OUTPUT	    8
+    * *    PWM_BAL_OUTPUT     9
+    * *    GPIO_CLOCK		      3
+    * *    SOFT_PWM_OUTPUT		4
+    * *    SOFT_TONE_OUTPUT	  5
+    * *    PWM_TONE_OUTPUT		6
+    * *    PM_OFF		          7   // to input / release line
+    *
+    */
+    gpio_array.forEach(gpio => {
+      // Ensure required properties exist
+      if (gpio.b === undefined) {
+        console.warn("GPIO object missing required properties:", gpio);
+        return;
+      }
+
+      const gpio_obj = {
+        pin_module_key: gpio.i == null ? 0 : gpio.i,
+        pin_number: gpio.b,
+        pin_mode: gpio.m,
+        gpio_type: gpio.t,
+        pin_value: gpio.v,
+        pin_name: gpio.n,
+        pwm_width: gpio.d == null ? 0 : gpio.d,
+      };
+
+      this.m_gpios[gpio.i + '-' + gpio.b] = gpio_obj;
+    });
+  }
+
+  /**
+   * 
+   * @param {*} name gpio name
+   * @returns {Array} - An array of GPIO objects with the specified name.
+   */
+  getGPIOByName(name) {
+    if (typeof name !== 'string') {
+      console.error("Invalid input: name must be a string.");
+      return []; // Return an empty array for invalid input
+    }
+
+    const foundGpios = [];
+    for (const key in this.m_gpios) {
+      if (this.m_gpios.hasOwnProperty(key) && this.m_gpios[key].pin_name === name) {
+        foundGpios.push(this.m_gpios[key]);
+      }
+    }
+
+    return foundGpios; // Return an array of all GPIO objects with the given name
+  }
+}
+
+class C_Modules {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.has_fcb = false;
+    this.has_fcb_alive = false;
+    this.has_camera = false;
+    this.has_camera_alive = false;
+    this.has_sound = false;
+    this.has_sound_alive = false;
+    this.has_gpio = false;
+    this.has_gpio_alive = false;
+    this.has_p2p = false;
+    this.has_p2p_alive = false;
+    this.has_sdr = false;
+    this.has_sdr_alive = false;
+    this.has_tracking = false;
+    this.has_tracking_alive = false;
+    this.has_ai_recognition = false;
+    this.has_ai_recognition_alive = false;
+    this.has_viewlink = false;
+    this.has_viewlink_alive = false;
+    this.has_telnet = false;
+    this.has_telnet_alive = false;
+    this.has_precision_landing = false;
+    this.has_precision_landing_alive = false;
+
+    this.m_old_version = false;
+
+    this.m_list = [];
+
+
+    Object.seal(this);
+  }
+
+  compareVersions(v1, v2) {
+    if (!v1 || !v2) return 0;
+
+    const normalize = (version) => {
+      // Split the version string by dots and convert each part to an integer.
+      // Filter out empty strings that might result from extra dots.
+      return version.split('.').filter(Boolean).map(part => parseInt(part, 10));
+    };
+    const a1 = normalize(v1);
+    const a2 = normalize(v2);
+
+    const len = Math.max(a1.length, a2.length);
+
+    for (let i = 0; i < len; i++) {
+      const p1 = a1[i] || 0;
+      const p2 = a2[i] || 0;
+
+      if (p1 > p2) {
+        return 1; // v1 is larger
+      }
+      if (p1 < p2) {
+        return -1; // v2 is larger
+      }
+    }
+
+    return 0; // Versions are the same
+  };
+
+  /**
+   * Searches the internal list of modules (m_list) and returns the module object 
+   * that matches the given module key.
+   * * The module key is expected to be stored under the property 'i' of the module object.
+   * * @param {string} p_module_key The unique key of the module to find (property 'i').
+   * @returns {Object | null} The module object if found, otherwise null.
+   */
+  getModuleByKey(p_module_key) {
+    // Ensure we have a valid key to search for and the list is an array
+    if (!p_module_key || !Array.isArray(this.m_list)) {
+      return null;
+    }
+
+    // Use Array.prototype.find() for an efficient search
+    const foundModule = this.m_list.find(module => {
+      return module && module.k === p_module_key;
+    });
+
+    // Return the found module or null if not found
+    return foundModule || null;
+  }
+
+  addModules(jsonModules) {
+
+    // Ensure jsonModules is an array
+    if (!Array.isArray(jsonModules)) {
+      console.error("Invalid input: jsonModules must be an array.");
+      return;
+    }
+
+    let old_module = false;
+
+    // check uavos_camera_plugin
+    /*
+    {"v", module_item->version},
+    {"i", module_item->module_key},
+    {"c", module_item->module_class},
+    {"t", module_item->time_stamp},
+    {"d", module_item->is_dead},
+    */
+    jsonModules.forEach(module => {
+      switch (module.c.toLowerCase()) {
+        case js_andruavMessages.TYPE_MODULE_CLASS_FCB:
+          this.has_fcb = true;
+          this.has_fcb_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.fcb ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.fcb.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.fcb;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_GPIO:
+          this.has_gpio = true;
+          this.has_gpio_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.gpio ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.gpio.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.gpio;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_SOUND:
+          this.has_sound = true;
+          this.has_sound_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.snd ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.snd.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.snd;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_P2P:
+          this.has_p2p = true;
+          this.has_p2p_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.p2p ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.p2p.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.p2p;
+          old_module = old_module || (module.z == 1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_SDR:
+          this.has_sdr = true;
+          this.has_sdr_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.sdr ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.sdr.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.sdr;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_CAMERA:
+          this.has_camera = true;
+          this.has_camera_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.camera ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.camera.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.camera;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_TRACKING:
+          this.has_tracking = true;
+          this.has_tracking_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.trk ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.trk.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.trk;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_AI_RECOGNITION:
+          this.has_ai_recognition = true;
+          this.has_ai_recognition_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.aiq ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.aiq.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.aiq;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_VIEW_LINK:
+          this.has_viewlink = true;
+          this.has_viewlink_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.vlk ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.vlk.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.vlk;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_TELNET:
+          this.has_telnet = true;
+          this.has_telnet_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.tel ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.tel.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.tel;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        case js_andruavMessages.TYPE_MODULE_CLASS_PRECISION_LANDING:
+          this.has_precision_landing = true;
+          this.has_precision_landing_alive = module.d === false;
+          module.z = js_siteConfig.CONST_MODULE_VERSIONS.pl ? this.compareVersions(module.v, js_siteConfig.CONST_MODULE_VERSIONS.pl.version) : 0;
+          module.version_info = js_siteConfig.CONST_MODULE_VERSIONS.pl;
+          old_module = old_module || (module.z == -1);
+          break;
+
+        default:
+          console.warn(`Unknown module class: ${module.c}`);
+          break;
+      }
+    });
+
+    this.m_list = jsonModules;
+
+    if (old_module !== this.m_old_version)
+      this.m_old_version = old_module;
+    js_eventEmitter.fn_dispatch(js_event.EE_OldModule);
+  }
+}
+/**
+ * Handles message counters.
+ */
+class C_Messages {
+  constructor(p_parent) {
+    this.m_parent = p_parent;
+    this.fn_reset();
+  }
+
+  fn_addMavlinkMsg(message_mavlin) {
+    if (
+      this.m_messages_in_mavlink.hasOwnProperty(message_mavlin.name) === false
+    ) {
+      this.m_messages_in_mavlink[message_mavlin.name] = 1;
+    } else {
+      ++this.m_messages_in_mavlink[message_mavlin.name];
+    }
+  }
+
+  /**
+   * message type counter.
+   * @param {*} message_id
+   */
+  fn_addMsg(message_id) {
+    if (this.m_messages_in.hasOwnProperty(message_id) === false) {
+      this.m_messages_in[message_id] = 1;
+    } else {
+      ++this.m_messages_in[message_id];
+    }
+  }
+
+  /**
+   * Stores messages status to know what message is sent to or from this unit so we can ignore repeated messages.
+   * @param {*} message_id message id
+   * @param {*} interval_ms send it every ms
+   * @param {*} from_time last time sent .
+   */
+  fn_doNotRepeatMessageBefore(message_id, interval_ms, from_time) {
+    this.m_messages_repeat[message_id] = {
+      interval_ms: interval_ms,
+      timestamp: from_time,
+    };
+  }
+
+  /**
+   * Test if a message can be processed, sent or ignored.
+   * if true then can be added or can be re-send.
+   * @param {*} message_id
+   * @returns
+   */
+  fn_sendMessageAllowed(message_id) {
+    const data = this.m_messages_repeat[message_id];
+    if (data === null || data === undefined) return true;
+
+    const can_send = new Date() - data.from_time > data.interval_ms;
+    return can_send;
+  }
+
+  fn_reset() {
+    this.m_messages_repeat = {};
+    this.m_messages_in = {};
+    this.m_messages_in_mavlink = {};
+
+    this.m_received_msg = 0;
+    this.m_received_bytes = 0;
+    this.m_lastActiveTime = 0;
+  }
+}
+
+export class CAndruavUnitObject {
+
+  #m_partyID;
+  #m_version;
+  #m_isDE;
+
+  constructor() {
+    this.m_index = 0;
+    this.m_pathColor = null; // user-selected flight path color (null = use index-based default)
+
+    this.m_defined = false;
+    this.m_IsMe = false;
+    this.m_IsGCS = true;
+    this.#m_isDE = false; // is Drone Engage
+    this.Description = "";
+    this.m_inZone = null; // name of A ZONE  that the unit is IN.
+    this.m_unitName = "unknown";
+    this.#m_partyID = null;
+    this.m_groupName = null;
+    this.m_isFlying = false;
+    this.m_FlyingLastStartTime = 0; // flight duration of latest or current flight.
+    this.m_FlyingTotalDuration = 0;
+    this.m_flightMode = CONST_FLIGHT_CONTROL_UNKNOWN;
+    this.m_autoPilot = mavlink20.MAV_AUTOPILOT_GENERIC;
+    this.m_isArmed = false;
+    this.m_is_ready_to_arm = false;
+    this.m_useFCBIMU = false;
+    this.m_VehicleType = VEHICLE_UNKNOWN;
+    this.m_telemetry_protocol = js_andruavMessages.CONST_No_Telemetry;
+    this.m_enum_userStatus = 0;
+    this.#m_version = "unknown";
+    this.m_delayedTimeout = null; // used for delayed actions.
+    this.m_module_version_comparison = -1;
+    this.m_module_version_info = null;
+
+    // DroneEngage Pilot fields
+    this.m_de_pilot_enabled = false;
+    this.m_de_pilot_operation = 0;
+
+    this.init();
+
+
+    this.m_fencestatus = null;
+    this.m_VehicleType_TXT = '';
+    this.m_wayPoint = {};
+
+    // Module flags
+    this.has_viewlink = false;
+    this.has_viewlink_alive = false;
+    this.has_ai_recognition = false;
+    this.has_ai_recognition_alive = false;
+
+    // UNCOMMENT LATER ... make sure that there is no add-on properties.
+    Object.seal(this);
+
+  }
+
+  setPartyID(p_partyID) {
+    this.#m_partyID = p_partyID
+  }
+
+  getPartyID() {
+    return this.#m_partyID;
+  }
+
+  fn_setIsDE(p_isDE) {
+    this.#m_isDE = p_isDE;
+    if (this.#m_isDE === true) {
+      this.m_module_version_info = js_siteConfig.CONST_MODULE_VERSIONS.de ?? null;
+    }
+    else {
+      this.m_module_version_info = js_siteConfig.CONST_MODULE_VERSIONS.andruav ?? null;
+    }
+  }
+
+  fn_getIsDE() {
+    return this.#m_isDE;
+  }
+
+  fn_isAndruav() {
+    return this.#m_isDE === false;
+  }
+
+  fn_setVersion(p_version) {
+    this.#m_version = p_version;
+    let module_version_comparison = 0;
+
+    if (this.#m_isDE === true) {
+      module_version_comparison = js_siteConfig.CONST_MODULE_VERSIONS.de ? this.m_modules.compareVersions(this.#m_version, js_siteConfig.CONST_MODULE_VERSIONS.de.version) : 0;
+    }
+    else {
+      module_version_comparison = js_siteConfig.CONST_MODULE_VERSIONS.andruav ? this.m_modules.compareVersions(this.#m_version, js_siteConfig.CONST_MODULE_VERSIONS.andruav.version) : 0;
+    }
+
+    if (this.m_module_version_comparison != module_version_comparison) {
+      this.m_module_version_comparison = module_version_comparison;
+      js_eventEmitter.fn_dispatch(js_event.EE_OldModule);
+    }
+
+  }
+
+  fn_getVersion() {
+    return this.#m_version;
+  }
+
+  fn_getFullName() {
+    return fn_getFullName(this.m_groupName, this.m_unitName);
+  }
+
+  fn_canCamera() {
+    if ((this.#m_isDE === true) && (this.m_modules.has_camera_alive === false)) return false;
+
+    if (this.m_Permissions[10] === "C") {
+      return true;
+    }
+
+    return false;
+  }
+
+  fn_canVideo() {
+    if ((this.#m_isDE === true) && (this.m_modules.has_camera_alive === false)) return false;
+
+    if (this.m_Permissions[8] === "V") {
+      return true;
+    }
+
+    return false;
+  }
+
+  init() {
+    this.#m_isDE = false;
+    this.m_time_sync = 0; // time sent by unit so that you can use it to measrue other time fields sent by the same module.
+    this.m_Permissions = "X0X0X0X0X0X0";
+    this.m_IsShutdown = false; // Drone Unit reports a shutdown
+    this.m_IsDisconnectedFromGCS = false; // Unit is connected to WebClient.
+    this.m_WindSpeed = null;
+    this.m_WindSpeed_z = null;
+    this.m_WindDirection = null;
+    this.m_modules = new C_Modules(this);
+    this.m_GPIOs = new C_GPIO(this);
+    this.m_Messages = new C_Messages(this);
+    this.m_Power = new C_Power(this);
+    this.m_GPS_Info1 = new C_GPS(this);
+    this.m_GPS_Info2 = new C_GPS(this);
+    this.m_GPS_Info3 = new C_GPS(this);
+    this.m_Nav_Info = new C_NavInfo(this);
+    this.m_Terrain_Info = new C_Terrain(this);
+    this.m_flightPathHistory = new js_circularBuffer.ClssCustomCircularBuffer(
+      CONST_DEFAULT_FLIGHTPATH_STEPS_COUNT
+    );
+    this.m_Geo_Tags = new C_GeoTags(this);
+    this.m_Telemetry = new C_Telemetry(this);
+    this.m_Servo = new C_Servo(this);
+    this.m_Gimbal = new C_Gimbal(this);
+    this.m_Video = new C_Video(this);
+    this.m_Sound = new C_Sound(this);
+    this.m_Obstacles = new C_Obstacles(this);
+    this.m_tracker = new C_Tracker(this);
+    this.m_tracker_ai = new C_TRACKER_AI(this);
+    this.m_precland = new C_Precland(this);
+    this.m_DetectedTargets = new C_DetectedTargets(this);
+
+    this.m_Swarm = new C_Swarm(this);
+    this.m_P2P = new C_P2P(this);
+    this.m_SDR = new C_SDR(this);
+    this.m_SignalStatus = new C_SignalStatus(this);
+
+    this.m_FCBParameters = new C_FCBParameters(this);
+    this.m_EKF = new C_EKF(this);
+    this.m_Vibration = new C_Vibration(this);
+
+    this.m_lidar_info = new C_LidarInfo(this);
+    this.m_Throttle = 0; //MAVLINK_MSG_ID_VFR_HUD.throttle uint16_t % Current throttle setting (0 to 100).
+
+    this.m_moduleHealth = {};
+
+
+  }
+
+  /**
+   * Reset unit object when board connects (FI changes from false to true)
+   * to clear stale data from previous sessions while preserving critical properties
+   * @param {Object} currentValues - Current values from the message to apply after reset
+   */
+  fn_resetOnBoardConnection(currentValues) {
+    // Store important properties that get reset by init()
+    const partyID = this.getPartyID();
+    const isMe = this.m_IsMe;
+    const defined = this.m_defined;
+    const groupName = this.m_groupName;
+    const version = this.fn_getVersion();
+    const isDE = this.fn_getIsDE();
+    const enum_userStatus = this.m_enum_userStatus;
+    const fencestatus = this.m_fencestatus;
+    const VehicleType_TXT = this.m_VehicleType_TXT;
+    const wayPoint = this.m_wayPoint;
+    
+    // Module flags
+    const has_viewlink = this.has_viewlink;
+    const has_viewlink_alive = this.has_viewlink_alive;
+    const has_ai_recognition = this.has_ai_recognition;
+    const has_ai_recognition_alive = this.has_ai_recognition_alive;
+    
+    this.init();
+    
+    // Restore critical properties that shouldn't be reset
+    this.setPartyID(partyID);
+    this.m_IsMe = isMe;
+    this.m_defined = defined;
+    this.m_groupName = groupName;
+    this.fn_setVersion(version);
+    this.fn_setIsDE(isDE);
+    this.m_enum_userStatus = enum_userStatus;
+    this.m_fencestatus = fencestatus;
+    this.m_VehicleType_TXT = VehicleType_TXT;
+    this.m_wayPoint = wayPoint;
+    
+    // Restore module flags
+    this.has_viewlink = has_viewlink;
+    this.has_viewlink_alive = has_viewlink_alive;
+    this.has_ai_recognition = has_ai_recognition;
+    this.has_ai_recognition_alive = has_ai_recognition_alive;
+    
+    // Apply current values from the message
+    if (currentValues.FI !== undefined) this.m_useFCBIMU = currentValues.FI;
+    if (currentValues.TP !== undefined) this.m_telemetry_protocol = currentValues.TP;
+    if (currentValues.T !== undefined) this.m_time_sync = currentValues.T;
+    if (currentValues.AP !== undefined) this.m_autoPilot = currentValues.AP;
+    if (currentValues.VT !== undefined) this.m_VehicleType = currentValues.VT;
+    if (currentValues.GS !== undefined) this.m_IsGCS = currentValues.GS;
+    if (currentValues.UD !== undefined) this.m_unitName = currentValues.UD;
+    if (currentValues.DS !== undefined) this.Description = currentValues.DS;
+    if (currentValues.p !== undefined) this.m_Permissions = currentValues.p;
+    this.m_IsDisconnectedFromGCS = false;
+  }
+
+  fullName() {
+    return this.fn_getFullName(this.m_groupName, this.#m_partyID);
+  }
+
+
+  //TODO: remove this function
+  module_version() {
+    let module_version = (this.Description + '\n');
+
+    if (this.#m_isDE !== true) {
+      module_version += "Andruav: " + this.#m_version
+    }
+    else {
+      module_version += "DE version: " + this.#m_version;
+    }
+
+    return module_version;
+  }
+
+
+  fn_disconnect() {
+    if (!this.m_IsMe) {
+      return;
+    }
+
+    // todo : apply any shutdown updates
+
+  }
+
+
+
+}
+
+class CAndruavUnitList {
+  constructor() {
+    this.List = new Map();
+    this.count = 0;
+
+    this.m_currentEngagedUnitRX = null;
+    Object.seal(this);
+  }
+
+  static getInstance() {
+    if (!CAndruavUnitList.instance) {
+      CAndruavUnitList.instance = new CAndruavUnitList();
+    }
+    return CAndruavUnitList.instance;
+  }
+
+  fn_resetList() {
+    this.List.clear();
+  }
+
+  fn_getUnitsArray() {
+    return Array.from(this.List.entries());
+  }
+
+  /**
+     * Returns units sorted by name.
+     * @returns {Array} An array of units sorted by name.
+     */
+  fn_getUnitsSorted() {
+    return Array.from(this.List.values()).sort((a, b) => {
+      const nameA = a.m_unitName || "";
+      const nameB = b.m_unitName || "";
+      return nameA.localeCompare(nameB);
+    });
+  }
+
+
+  /**
+   * Returns units sorted by system ID.
+   * @returns {Array} An array of units sorted by system ID.
+   */
+  fn_getUnitsSortedBy_APID() {
+    return Array.from(this.List.values()).sort((a, b) => {
+      const idA = a.m_FCBParameters.m_systemID || 0;
+      const idB = b.m_FCBParameters.m_systemID || 0;
+      return idA - idB;
+    });
+  }
+
+  /**
+       * Finds a unit by P2P MAC address.
+       * @param {string} mac The MAC address to search for.
+       * @returns {CAndruavUnitObject|null} The unit with the specified MAC address, or null if not found.
+       */
+  fn_getUnitByP2PMac(mac) {
+    return Array.from(this.List.values()).find(unit => unit.m_P2P.fn_isMyMac(mac)) || null;
+  }
+
+  Add(partyID, andruavUnit) {
+    if (this.List.has(partyID)) return;
+    andruavUnit.m_index = this.count;
+    this.List.set(partyID, andruavUnit);
+    this.count++;
+  }
+
+  Del(partyID) {
+    if (this.List.has(partyID)) {
+      this.List.delete(partyID);
+      this.count--;
+    }
+  }
+
+  fn_getUnit(partyID) {
+    return this.List.get(partyID) || null;
+  }
+
+  fn_getUnitKeys() {
+    if (!js_session.fn_getAndruavClient()) return undefined;
+    return Array.from(this.List.keys());
+  }
+
+  fn_getUnitValues() {
+    if (!js_session.fn_getAndruavClient()) return undefined;
+    return Array.from(this.List.values());
+  }
+
+  /**
+   * Returns true if there is at least one other unit with the same vehicle type
+   * as the provided unit.
+   * @param {CAndruavUnitObject} p_andruavUnit
+   * @returns {boolean}
+   */
+  fn_hasSameTypeUnits(p_andruavUnit) {
+    if (!p_andruavUnit) return false;
+
+    const units = this.fn_getUnitValues() || [];
+    let count = 0;
+    for (let i = 0; i < units.length; ++i) {
+      const unit = units[i];
+      if (unit && unit.m_VehicleType === p_andruavUnit.m_VehicleType) {
+        count++;
+        if (count > 1) {
+          return true; // found at least one *other* same-type unit
+        }
+      }
+    }
+    return false;
+  }
+
+  fn_getUnitCount() {
+    if (!js_session.fn_getAndruavClient() || !this.List) return 0;
+    return this.List.size;
+  }
+
+  putUnit(unitFullName, andruavUnit) {
+    this.List.set(unitFullName, andruavUnit);
+  }
+
+  getEngagedUnitRX() {
+    return this.m_currentEngagedUnitRX;
+  }
+
+  disengageUnitRX(p_andruavUnit) {
+    if (!p_andruavUnit) {
+      this.m_currentEngagedUnitRX = undefined;
+      return;
+    }
+
+    p_andruavUnit.m_Telemetry.m_rxEngaged = false;
+
+    if (!this.m_currentEngagedUnitRX) return;
+
+
+    if (p_andruavUnit.getPartyID() === this.m_currentEngagedUnitRX.getPartyID()) {
+      this.m_currentEngagedUnitRX = undefined;
+    }
+
+  }
+
+  engageUnitRX(p_andruavUnit) {
+    if (!p_andruavUnit) return;
+
+    p_andruavUnit.m_Telemetry.m_rxEngaged = true;
+    this.m_currentEngagedUnitRX = p_andruavUnit;
+  }
+
+
+}
+
+Object.seal(CAndruavUnitList.prototype);
+export const AndruavUnitList = CAndruavUnitList.getInstance();

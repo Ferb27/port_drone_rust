@@ -1,0 +1,132 @@
+#ifndef FCB_TRAFFIC_OPTIIZER_H_
+#define FCB_TRAFFIC_OPTIIZER_H_
+
+
+#include "./de_common/helpers/json_nlohmann.hpp"
+using Json_de = nlohmann::json;
+
+#include <all/mavlink.h>
+#include <mavlink_sdk.h>
+#include <unordered_map>
+#include <mutex>
+
+
+
+
+namespace de
+{
+namespace fcb
+{
+
+    #define TIME_STAMP_MSG_LEN 1024
+    #define OPTIMIZE_LEVELS     4
+
+    #define OPTIMIZE_LEVEL_0    0   
+    #define OPTIMIZE_LEVEL_1    1
+    #define OPTIMIZE_LEVEL_2    2
+    #define OPTIMIZE_LEVEL_3    3
+    #define OPTIMIZATION_LEVEL_DEFAULT OPTIMIZE_LEVEL_2
+
+
+    typedef struct T_MessageOptimizeCard
+    {
+        std::uint64_t timeout[OPTIMIZE_LEVELS];
+        std::uint64_t time_of_last_sent_message;
+    } T_MessageOptimizeCard;
+
+
+    class CMavlinkTrafficOptimizer
+    {
+
+        public:
+            //https://stackoverflow.com/questions/1008019/c-singleton-design-pattern
+            static CMavlinkTrafficOptimizer& getInstance()
+            {
+                static CMavlinkTrafficOptimizer instance;
+
+                return instance;
+            }
+
+            CMavlinkTrafficOptimizer(CMavlinkTrafficOptimizer const&)               = delete;
+            void operator=(CMavlinkTrafficOptimizer const&)                         = delete;
+
+        private:
+
+            CMavlinkTrafficOptimizer()
+            {
+
+            }
+        
+        public:
+
+            ~CMavlinkTrafficOptimizer()
+            {
+
+            }
+
+            
+        public:
+
+            void init(const Json_de &mavlink_messages_config);
+
+            /*
+            * @details Determines stream optimization. A critical parameter for network bandwidth.
+            * @param level from 0 to 3. Zero means no optimization and 3 max optimization.
+            */
+            void setOptimizationLevel (int level)
+            {
+                if (level <= OPTIMIZE_LEVEL_0) level = OPTIMIZE_LEVEL_0;
+                if (level >= OPTIMIZE_LEVEL_3) level = OPTIMIZE_LEVEL_3;
+
+                std::lock_guard<std::mutex> lock(m_lock);
+                m_optimization_level = level;
+            }
+
+            int getOptimizationLevel ()
+            {
+                std::lock_guard<std::mutex> lock(m_lock);
+                return m_optimization_level;
+            }
+
+            /**
+             * @details Returns true if the message should be forward via telemetry to GCS.
+             * Settings of this message are stored in config.json file.
+             * @link m_optimization_level @endlink is used to select timeout value.
+             * @param mavlink_message 
+             * @return true 
+             * @return false 
+             */
+            bool shouldForwardThisMessage (const mavlink_message_t& mavlink_message);
+
+            /**
+             * @brief Reset time_of_last_sent_message of all messages. 
+             * 
+             */
+            void reset_timestamps()
+            {
+                std::lock_guard<std::mutex> lock(m_lock);
+                for(auto& pair : m_message)
+                {
+                    pair.second.time_of_last_sent_message = 0;
+                }
+                
+                return;
+            }
+
+        private:
+
+            //T_MessageOptimizeCard m_message[TIME_STAMP_MSG_LEN];
+            // Fast msgid -> card lookup in the hot path (shouldForwardThisMessage): average O(1) find().
+            std::unordered_map<int, T_MessageOptimizeCard> m_message;
+            int m_optimization_level = OPTIMIZATION_LEVEL_DEFAULT;
+            // Guards m_message and m_optimization_level: shouldForwardThisMessage runs on the MAVLink
+            // read thread while setOptimizationLevel/reset_timestamps run on the Andruav command thread.
+            std::mutex m_lock;
+           
+    };
+
+    #undef TIME_STAMP_MSG_LEN
+
+}
+}
+#endif

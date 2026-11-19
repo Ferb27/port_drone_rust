@@ -1,0 +1,1393 @@
+div.css_mainbody {
+	position: fixed;
+	top: 60px;
+	/* Header height */
+	bottom: 30px;
+	/* Footer height */
+	left: 0;
+	right: 0;
+	overflow-y: hidden;
+	overflow-x: hidden;
+	width: 100%;
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+@media (max-width: 991.98px) {
+	div.css_mainbody {
+		flex-direction: column;
+		flex-wrap: nowrap;
+		overflow-y: auto;
+		overflow-x: hidden;
+		display: block;
+	}
+
+	#row_1,
+	#row_2 {
+		height: auto;
+		width: 100%;
+		flex: 0 0 auto;
+	}
+
+	#row_1 {
+		display: flex;
+		flex-direction: column;
+		min-height: auto;
+	}
+
+	#div_video_control {
+		height: auto;
+		overflow: visible;
+	}
+
+	#div_map_view {
+		height: 60vh;
+		min-height: 400px;
+		margin-left: 20px;
+		margin-right: 20px;
+		width: calc(100% - 40px);
+		/* Create a safe zone on sides for user scrolling */
+	}
+}
+
+@media (min-width: 992px) {
+	#row_1 {
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+}
+
+#row_1_1 {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+div#displays {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Notification bar takes content height only */
+#message_notification {
+	flex: 0 0 auto;
+}
+
+/* Map views fill the available height. The map and video blocks are
+   switchable (only one is display:block at a time via js_main.js), so the
+   visible one should stretch to fill #displays. This overrides the fixed
+   800px from div.monitorview so the map grows with the viewport (e.g. when
+   the browser enters F11 fullscreen). Scoped to desktop layout; mobile
+   keeps its 60vh rule below. */
+@media (min-width: 992px) {
+	#div_map_view,
+	#div_map3d_view {
+		flex: 1 1 auto;
+		min-height: 0;
+		height: auto;
+	}
+}
+
+/* Let the video block consume remaining height within displays */
+@media (min-width: 992px) {
+	#div_video_control {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+}
+
+img.camera_switch {
+	content: url('/public/images/mode-portrait_b.png');
+}
+
+img.video_ready {
+	content: url('/public/images/camera-movie_b.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.video_active {
+	content: url('/public/images/camera-movie_r.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.video_semi_active {
+	content: url('/public/images/camera-movie_w.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.video_inactive {
+	content: url('/public/images/camera-movie_gr.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_video_close {
+	content: url('/public/images/back_b_32x32.png');
+}
+
+
+
+img.css_goto_drone {
+	content: url('/public/images/gps_fix_32x32.png');
+}
+
+img.css_camera_switch {
+	content: url('/public/images/mode-portrait_b.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_video_ready {
+	content: url('/public/images/camera-movie_b.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_video_pip {
+	content: url('/public/images/mirror_bg_32x32.png');
+}
+
+
+img.css_fullscreen {
+	content: url('/public/images/fullscreen_gb_32x32.png');
+}
+
+img.css_fullscreen_active {
+	content: url('/public/images/fullscreen_rb_32x32.png');
+}
+
+img.css_video_fullscreen {
+	content: url('/public/images/fullscreen_gb_32x32.png');
+}
+
+img.css_video_fullscreen_active {
+	content: url('/public/images/fullscreen_rb_32x32.png');
+}
+
+img.css_camera_ready {
+	content: url('/public/images/camera_g.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_recvideo_ready {
+	content: url('/public/images/tape_b.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_recvideo_active {
+	content: url('/public/images/tape_r.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.recvideo_inactive {
+	content: url('/public/images/tape_gr.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.camera_ready {
+	content: url('/public/images/camera_bg_32x32.png');
+}
+
+img.camera_active {
+	content: url('/public/images/camera_g.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.camera_inactive {
+	content: url('/public/images/camera_gr.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_camera_zoom_in {
+	content: url('/public/images/zoom-in_b.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_camera_zoom_out {
+	content: url('/public/images/zoom-out_g.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_camera_mirrorX {
+	content: url('/public/images/flip-horizontal_b.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_camera_rotate {
+	content: url('/public/images/camera-rotate_g.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_camera_flash_off {
+	content: url('/public/images/circle-bolt_b.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.css_tracking_on {
+	content: url('/public/images/following_enabled_32x32.png');
+}
+
+img.css_tracking_off {
+	content: url('/public/images/following_inactive_32x32.png');
+}
+
+img.css_camera_flash_on {
+	content: url('/public/images/circle-bolt_r.png');
+	display: inline-flex;
+	width: 32px;
+	padding: 1px;
+}
+
+img.battery_inactive {
+	content: url('/public/images/battery_gy_32x32.png');
+}
+
+img.battery_4 {
+	content: url('/public/images/battery_g_32x32.png');
+}
+
+img.battery_3 {
+	content: url('/public/images/battery_rg_32x32.png');
+}
+
+img.battery_2 {
+	content: url('/public/images/battery_rg_3_32x32.png');
+}
+
+img.battery_1 {
+	content: url('/public/images/battery_r_32x32.png');
+}
+
+img.battery_charging {
+	content: url('/public/images/battery_bg_32x32.png');
+}
+
+div#imu_yaw_knob {
+	width: 45px;
+}
+
+div#imu_2 {
+	min-height: 45px;
+}
+
+div#bearingknob {
+	min-width: 45px;
+	position: absolute;
+	top: 0px;
+}
+
+div#bearingtargetknob {
+	min-width: 45px;
+	top: 5px;
+}
+
+div#bearing_main {
+	position: relative;
+}
+
+
+div#modal_ctrl_parameters #parameters_sublist {
+	overflow-y: scroll !important;
+	height: 400px !important;
+	margin: 20px 5px 15px 5px !important;
+	text-align: center;
+}
+
+
+div#andruav_unit_list_array {
+	position: fixed !important;
+	bottom: 22% !important;
+	height: 40px !important;
+	/* width: inherit !important; */
+}
+
+div#andruav_unit_list_array_float {
+	position: fixed !important;
+	bottom: 22% !important;
+	height: 40px !important;
+	/* width: inherit !important; */
+}
+
+
+div#modal_fpv {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	opacity: 0.85;
+	float: left;
+}
+
+
+div#modal_ctrl_yaw {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	opacity: 0.85;
+	float: left;
+}
+
+
+div#modal_ctrl_lidar_info {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	opacity: 0.85;
+	float: left;
+}
+
+
+div#modal_ctrl_precland {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	opacity: 0.85;
+	float: left;
+}
+
+
+
+div#modal_ctrl_cam {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	min-width: 400px !important;
+	max-width: 600px !important;
+	opacity: 0.85;
+	float: left;
+}
+
+div#modal_ctrl_fpv {
+	position: absolute;
+	top: 120px;
+	left: 100px;
+	opacity: 0.85;
+	z-index: 2100 !important;
+}
+
+div#modal_ctrl_servo {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	min-width: 400px !important;
+	opacity: 0.85;
+	z-index: 2100 !important;
+	float: left;
+}
+
+
+
+div#modal_ctrl_stream_dlg {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	min-width: 400px !important;
+	max-width: 600px !important;
+	opacity: 0.85;
+	z-index: 2100 !important;
+	float: left;
+}
+
+div#modal_ctrl_gimbal_dlg {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	min-width: 400px !important;
+	max-width: 600px !important;
+	opacity: 0.85;
+	z-index: 2100 !important;
+	float: left;
+}
+
+div#modal_ctrl_gamepad {
+	position: absolute;
+	top: 200px;
+	left: 100px;
+	width: 400px;
+	background-color: transparent !important;
+	opacity: 0.85;
+	float: left;
+}
+
+#modal_gamepad_footer {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 10px;
+	background-color: #343a40;
+	/* Matches bg-dark */
+}
+
+#modal_gamepad_footer>div {
+	flex: 0 0 auto;
+	/* Allow buttons to take their natural width */
+}
+
+
+input#txt_defaultCircle {
+	width: 30% !important;
+	display: -webkit-inline-box !important;
+}
+
+input#txt_defaultAltitude {
+	width: 30% !important;
+	display: -webkit-inline-box !important;
+}
+
+input#txt_defaultSwarmAltDelta {
+	width: 30% !important;
+	display: -webkit-inline-box !important;
+}
+
+input#txt_defaultSwarmDistance {
+	width: 30% !important;
+	display: -webkit-inline-box !important;
+}
+
+
+
+.ctrlbtn {
+	width: 90px !important;
+	height: 30px !important;
+	font-size: 11px !important;
+	font-weight: bold !important;
+}
+
+
+.ctrlbtn_lng {
+	width: 80px !important;
+	font-size: 11px !important;
+	font-weight: bold !important;
+}
+
+.flgtctrlbtn {
+	height: 27px !important;
+	font-size: 11px !important;
+	font-weight: bold !important;
+}
+
+/* Flight-control button strip: buttons fused into one recessed grooved
+   rail, separated by divider grooves (segmented panel look). */
+.css_ctrlbtn_rail {
+	background: rgba(0, 0, 0, 0.25);
+	border: 1px solid rgba(0, 0, 0, 0.55);
+	border-radius: 8px;
+	box-shadow:
+		inset 0 2px 5px rgba(0, 0, 0, 0.55),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+		0 1px 0 rgba(255, 255, 255, 0.05);
+	padding: 0;
+	overflow: hidden;
+}
+
+/* Unpushed: flat segment inside the rail; the btn-* color still shows.
+   Covers direct-child buttons plus the first button inside a wrapper
+   (e.g. .dropdown), so dropdown toggles fuse into the rail too. */
+.css_ctrlbtn_rail > .btn,
+.css_ctrlbtn_rail > * > .btn:first-child {
+	margin: 0 !important;
+	border: none !important;
+	border-left: 1px solid rgba(0, 0, 0, 0.55) !important;
+	border-radius: 0 !important;
+	box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05);
+	background-image: none;
+}
+
+.css_ctrlbtn_rail > .btn:first-child,
+.css_ctrlbtn_rail > :first-child > .btn:first-child {
+	border-left: none !important;
+	box-shadow: none;
+}
+
+.css_ctrlbtn_rail > .btn:hover,
+.css_ctrlbtn_rail > * > .btn:first-child:hover {
+	background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Pushed: momentary press + latched/engaged state (css_pushed). */
+.css_ctrlbtn_rail > .btn:active,
+.css_ctrlbtn_rail > * > .btn:active:first-child,
+.css_ctrlbtn_rail > .btn.css_pushed,
+.css_ctrlbtn_rail > * > .btn.css_pushed:first-child {
+	box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6);
+}
+
+/* Disabled: muted. Hidden keeps display:none untouched. */
+.css_ctrlbtn_rail > .btn.disabled,
+.css_ctrlbtn_rail > * > .btn.disabled:first-child,
+.css_ctrlbtn_rail > .btn:disabled,
+.css_ctrlbtn_rail > * > .btn:disabled:first-child {
+	opacity: 0.45;
+}
+
+.flgtctrlbtn_icon {
+	width: 70px !important;
+	height: 24px !important;
+	font-size: 16px !important;
+	font-weight: bold !important;
+	padding: 0px !important;
+}
+
+
+.flgtctrlbtn_icon_w {
+	height: 24px !important;
+	width: 70px !important;
+	font-size: 16px !important;
+	font-weight: bold !important;
+	padding: 0px !important;
+}
+
+.flgtctrlbtn_lng {
+	width: 70px !important;
+	height: 24px !important;
+	font-size: 11px !important;
+	font-weight: bold !important;
+}
+
+
+.nav-tabs>li>a {
+	border: medium none;
+}
+
+.nav>li>a {
+	padding-top: 5px;
+	padding-bottom: 5px;
+}
+
+div.ctrldiv {
+	margin-top: 5px !important;
+}
+
+div#alertdiv {
+	border-width: 0px !important;
+}
+
+
+div#gimbaldiv {
+	display: none !important;
+	/*position: absolute !important;
+	top: 40px !important;
+	left: 20px !important;*/
+}
+
+div #css_video_ctrl_panel {
+	/*max-width: 500px;*/
+	margin-top: 5px !important;
+	margin-bottom: 5px !important;
+	background-color: #FFFFFF0F !important;
+	z-index: 1000;
+}
+
+div #css_tvideo-div {
+	margin: 5px 5px 5px 5px;
+	/* min-width: 100%; */
+}
+
+div#gimbaldiv button {
+	height: 20px !important;
+	width: 20px !important;
+	margin: 2px 2px 0px 0px !important;
+	padding: 1px !important;
+}
+
+div#login_form {
+	padding: 0 5px 0 5px;
+
+}
+
+div#login_btn {
+	margin-top: 5px;
+}
+
+
+
+input#txt_defaultCircle {
+	margin-left: 5px;
+	margin-right: 5px;
+}
+
+input#txt_defaultAltitude {
+	margin-left: 5px;
+	margin-right: 5px;
+}
+
+.css_videoScreen {
+	border-width: 2px !important;
+	border-color: blue !important;
+	border-style: groove !important;
+	padding: 0 !important;
+	margin: 0 !important;
+	box-sizing: border-box;
+}
+
+.css_videoContainer {
+	position: relative;
+	width: 100% !important;
+	height: 100% !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0px;
+	border-radius: 5px;
+	background-attachment: scroll;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+
+.css_videoContainer:fullscreen,
+.css_videoContainer:-webkit-full-screen,
+.css_videoContainer:-moz-full-screen,
+.css_videoContainer:-ms-fullscreen {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 100vw !important;
+	height: 100vh !important;
+	background-color: black;
+	border-radius: 0;
+}
+
+.css_fullscreen_toolbar.show_toolbar {
+	display: flex;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 1000;
+	background-color: rgba(0, 0, 0, 0.8);
+	padding: 8px;
+}
+
+/* Video sizing modes - apply in both normal and fullscreen */
+.videoObject.video_fit_contain {
+	width: auto !important;
+	height: auto !important;
+	max-width: 100% !important;
+	max-height: 100% !important;
+	object-fit: contain;
+}
+
+.videoObject.video_fit_width {
+	width: 100% !important;
+	height: auto !important;
+	max-width: 100% !important;
+	max-height: none !important;
+	object-fit: fill;
+}
+
+.videoObject.video_fit_height {
+	width: auto !important;
+	height: 100% !important;
+	max-width: none !important;
+	max-height: 100% !important;
+	object-fit: fill;
+}
+
+.videoObject.video_fit_stretch {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: 100% !important;
+	max-height: 100% !important;
+	object-fit: fill;
+}
+
+/* Video sizing modes for fullscreen - use viewport units */
+.css_videoContainer:fullscreen .videoObject.video_fit_contain,
+.css_videoContainer:-webkit-full-screen .videoObject.video_fit_contain,
+.css_videoContainer:-moz-full-screen .videoObject.video_fit_contain,
+.css_videoContainer:-ms-fullscreen .videoObject.video_fit_contain {
+	max-width: 100vw !important;
+	max-height: 100vh !important;
+}
+
+.css_videoContainer:fullscreen .videoObject.video_fit_width,
+.css_videoContainer:-webkit-full-screen .videoObject.video_fit_width,
+.css_videoContainer:-moz-full-screen .videoObject.video_fit_width,
+.css_videoContainer:-ms-fullscreen .videoObject.video_fit_width {
+	width: 100vw !important;
+}
+
+.css_videoContainer:fullscreen .videoObject.video_fit_height,
+.css_videoContainer:-webkit-full-screen .videoObject.video_fit_height,
+.css_videoContainer:-moz-full-screen .videoObject.video_fit_height,
+.css_videoContainer:-ms-fullscreen .videoObject.video_fit_height {
+	height: 100vh !important;
+}
+
+.css_videoContainer:fullscreen .videoObject.video_fit_stretch,
+.css_videoContainer:-webkit-full-screen .videoObject.video_fit_stretch,
+.css_videoContainer:-moz-full-screen .videoObject.video_fit_stretch,
+.css_videoContainer:-ms-fullscreen .videoObject.video_fit_stretch {
+	width: 100vw !important;
+	height: 100vh !important;
+}
+
+img.css_video_fit_mode_contain {
+	content: url('/public/images/mode-alt_w.png');
+	width: 32px;
+	height: 32px;
+}
+
+img.css_video_fit_mode_width {
+	content: url('/public/images/mode-alt_g.png');
+	width: 32px;
+	height: 32px;
+}
+
+img.css_video_fit_mode_height {
+	content: url('/public/images/mode-alt_b.png');
+	width: 32px;
+	height: 32px;
+}
+
+img.css_video_fit_mode_stretch {
+	content: url('/public/images/mode-alt_r.png');
+	width: 32px;
+	height: 32px;
+}
+
+.canvasOverlay {
+	width: 100%;
+	height: 100%;
+	position: absolute;
+	padding: 5px;
+	border-radius: 5px;
+	margin: 0px;
+	z-index: 2;
+}
+
+.videoOverlay {
+	width: 100%;
+	height: 100%;
+	position: absolute;
+	padding: 5px;
+	border-radius: 5px;
+	margin: 0px;
+	z-index: 2;
+	background: green;
+	opacity: 0.5;
+}
+
+.videoObject {
+	width: auto;
+	/* keep intrinsic size if smaller */
+	height: auto;
+	/* keep intrinsic size if smaller */
+	max-width: 100%;
+	/* downscale if too wide */
+	max-height: 100%;
+	/* downscale if too tall */
+	object-fit: contain;
+	/* preserve AR and fit inside */
+	padding: 0px;
+	margin: 0px;
+	position: relative;
+	z-index: 1;
+}
+
+/* Remove flex override on active pane to prevent layout issues */
+
+div#permissionCtrl {
+	border-radius: 15px;
+	border: 2px solid #555555;
+	padding: 20px !important;
+	margin-left: 20px !important;
+	margin-right: 20px !important;
+
+}
+
+div#permissionCtrl th {
+	text-align: center !important;
+}
+
+
+div#loginCtrl input {
+	max-width: 300px !important;
+}
+
+div.modal_dialog_style {
+	display: inline !important;
+}
+
+.capbox {
+	/*background-color: #92D433;
+	border: #B3E272 0px solid;
+	border-width: 0px 12px 0px 0px;*/
+	border-radius: 4px;
+	border: 1px solid #ccc;
+	display: inline-block;
+	padding: 5px;
+	color: #555555;
+}
+
+.capbox-inner {
+	font-size: small;
+	margin: 5px auto 0px auto;
+	padding: 3px;
+	-moz-border-radius: 4px;
+	-webkit-border-radius: 4px;
+	border-radius: 4px;
+}
+
+.css_servo_selected {
+	display: block !important;
+	cursor: default;
+}
+
+.css_servo_clickable {
+	display: block !important;
+	cursor: pointer;
+}
+
+.css_hud_bullets {
+	list-style-type: none !important;
+	padding: 2px !important;
+	margin: 0 !important;
+	font-size: small !important;
+	width: 72px !important;
+}
+
+.css_hud_bullets li {
+	display: flex !important;
+	justify-content: space-between !important;
+	align-items: center !important;
+}
+
+.css_hud_value {
+	display: inline-block !important;
+	width: 44px !important;
+	text-align: right !important;
+}
+
+.css_hud_div {
+	margin: 0 !important;
+	padding: 0 !important;
+	min-height: 50px !important;
+}
+
+.css_hud {
+	width: 50px !important;
+	height: 50px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+
+.css_target_bearing {
+	width: 50px !important;
+	height: 50px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+div#modal_ctrl_servo #title {
+	display: contents;
+}
+
+#CaptchaDiv {
+	font: bold 17px verdana, arial, sans-serif;
+	font-style: italic;
+	color: #000000;
+	background-color: #FFFFFF;
+	padding: 4px;
+	-moz-border-radius: 4px;
+	-webkit-border-radius: 4px;
+	border-radius: 4px;
+}
+
+#N {
+	border-radius: 4px;
+	border: 1px solid #ccc
+}
+
+#CaptchaInput {
+	margin: 1px 0px 1px 0px;
+	width: 135px;
+}
+
+
+div.msg {
+	color: yellow;
+	font-size: large;
+	font-weight: bold;
+	position: absolute;
+	top: 45px;
+	left: 95px;
+}
+
+div.msgerror {
+	color: red;
+	font-size: large;
+	font-weight: bold;
+	position: absolute;
+	top: 45px;
+	left: 95px;
+}
+
+.textunit {
+	display: inline-block;
+	font-size: smaller !important;
+}
+
+.textunit_w135 {
+	display: inline-block;
+	font-size: smaller !important;
+	width: 135px !important;
+}
+
+.textunit_att_btn {
+	display: inline-block;
+	font-size: small !important;
+	width: 100% !important;
+	height: -webkit-fill-available !important;
+}
+
+/* IMU status rail: one grooved strip per row; divider grooves between segments. */
+.css_imu_rail {
+	display: flex;
+	background: rgba(0, 0, 0, 0.28);
+	border: 1px solid rgba(0, 0, 0, 0.55);
+	border-radius: 8px;
+	box-shadow:
+		inset 0 2px 4px rgba(0, 0, 0, 0.5),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+	overflow: hidden;
+}
+
+.css_imu_railseg {
+	flex: 1 1 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	min-height: 3rem;
+	padding: 3px 6px;
+	margin: 0;
+	border-left: 1px solid rgba(0, 0, 0, 0.6);
+	box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.07);
+	overflow: hidden;
+	text-align: center;
+}
+
+.css_imu_railseg:first-child {
+	border-left: none;
+	box-shadow: none;
+}
+
+.css_imu_railseg:hover {
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.css_imu_railseg .t_label {
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	opacity: 0.75;
+	line-height: 1.1;
+}
+
+.css_imu_railseg .t_value {
+	font-size: 0.85rem;
+	font-weight: 700;
+	line-height: 1.15;
+	overflow-wrap: break-word;
+}
+
+.css_imu_railseg .t_sub {
+	font-size: 0.68rem;
+	opacity: 0.8;
+	line-height: 1.1;
+}
+
+.css_imu_railseg.acc-danger    .t_value { color: var(--bs-danger); }
+.css_imu_railseg.acc-warning   .t_value { color: var(--bs-warning); }
+.css_imu_railseg.acc-success   .t_value { color: var(--bs-success); }
+.css_imu_railseg.acc-info      .t_value { color: var(--bs-info); }
+.css_imu_railseg.acc-primary   .t_value { color: var(--bs-primary); }
+.css_imu_railseg.acc-secondary .t_value { color: var(--bs-secondary); }
+.css_imu_railseg.acc-light     .t_value { color: var(--bs-light); }
+
+.textunit_nowidth {
+	display: inline-block;
+	font-size: smaller !important;
+	padding: 0px 10px 0px 10px !important;
+}
+
+
+.modal-title {
+	font-size: medium !important;
+}
+
+.css_textsmallwidth {
+	width: 60px !important;
+}
+
+
+#btn_filesWP {
+	height: auto;
+}
+
+.css_leaflet_icon {
+	background-color: transparent !important;
+}
+
+
+
+
+
+.small_icon {
+	max-width: 35px !important;
+}
+
+.fence_tooltip:before {
+	right: 0;
+	margin-right: -12px;
+	border-color: transparent;
+}
+
+
+.css_label_waypoint {
+	width: 50%;
+	height: 100%;
+}
+
+
+table.css_table_log {
+	max-height: 350px;
+	overflow: auto;
+	display: inline-block;
+}
+
+@media (min-width: 992px) {
+	#row_2 {
+		overflow-y: auto;
+		height: 100%;
+	}
+}
+
+@media (max-width: 991.98px) {
+	#row_2 {
+		height: auto;
+		overflow-y: visible;
+	}
+}
+
+
+div#displays {
+	margin: 1px 5px 5px 5px !important;
+	padding: 1px 5px 5px 5px !important;
+}
+
+/* Make the video area fill available height with no scrollbars */
+@media (min-width: 992px) {
+	#div_video_control {
+		height: 100%;
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+	}
+}
+
+@media (max-width: 991.98px) {
+	#div_video_control {
+		height: auto;
+		overflow: visible;
+	}
+}
+
+#div_video_control>.container-fluid.localcontainer {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+#div_video_control .nav.nav-tabs {
+	margin-bottom: 4px !important;
+}
+
+#div_video_control .tab-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+#div_video_control .tab-content .tab-pane.css_videoScreen {
+	height: 100% !important;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* Keep header and control panel at content height; give the rest to video */
+#div_video_control .css_videoScreen>h4,
+#div_video_control #css_video_ctrl_panel {
+	flex: 0 0 auto;
+}
+
+#div_video_control .css_videoScreen>.row {
+	flex: 0 0 auto;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+/* Let the video container grow to fill remaining space */
+#div_video_control .css_videoContainer {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+
+/*
+	Update Leaflet
+*/
+.leaflet-popup-content {
+	width: fit-content !important;
+}
+
+
+.leaflet-control-attribution.leaflet-control a:first-child {
+	display: none;
+}
+
+
+/* ADSB toggle button (under the +/- zoom controls).
+   active = ADSB enabled (highlighted), inactive = disabled (dimmed).
+   The ADSB and Wind toggles are grouped as a single visual bar (no gap
+   between them), matching the +/- zoom button pair. */
+.leaflet-adsb-toggle-control {
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
+.leaflet-adsb-toggle-control a.leaflet-adsb-toggle-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	line-height: 1;
+}
+
+.leaflet-adsb-toggle-control a.leaflet-adsb-toggle-active {
+	background-color: #fff3cd;
+	border: 1px solid #e9c250;
+}
+
+.leaflet-adsb-toggle-control a.leaflet-adsb-toggle-inactive {
+	opacity: 0.45;
+}
+
+/* ADSB provider error state — red background to surface fetch failures
+   (HTTP 500, network error, rate limit, etc.) on the map. */
+.leaflet-adsb-toggle-control a.leaflet-adsb-toggle-error {
+	background-color: #f8d7da;
+	border: 1px solid #dc3545;
+	opacity: 1;
+}
+
+.leaflet-adsb-toggle-control a.leaflet-adsb-toggle-btn:hover {
+	opacity: 1.0;
+}
+
+/* Wind-arrow toggle button (under the ADSB toggle, topleft).
+   active = wind arrow enabled (highlighted), inactive = disabled (dimmed).
+   Mirrors the ADSB toggle styling. Grouped with the ADSB toggle as a
+   single visual bar — no margin between them, square top corners. */
+.leaflet-wind-toggle-control {
+	margin-top: 0 !important;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+
+.leaflet-wind-toggle-control a.leaflet-wind-toggle-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	line-height: 1;
+}
+
+.leaflet-wind-toggle-control a.leaflet-wind-toggle-active {
+	background-color: #fff3cd;
+	border: 1px solid #e9c250;
+}
+
+.leaflet-wind-toggle-control a.leaflet-wind-toggle-inactive {
+	opacity: 0.45;
+}
+
+.leaflet-wind-toggle-control a.leaflet-wind-toggle-btn:hover {
+	opacity: 1.0;
+}
+
+
+#css_video_ctrl_panel {
+	display: flex;
+	flex-direction: row;
+	/* Arrange items horizontally */
+	padding: 0;
+	overflow-x: auto;
+	/* Enable horizontal scrolling if needed */
+	opacity: 0.5;
+	transition: opacity 0.3s ease;
+}
+
+#css_video_ctrl_panel:hover {
+	opacity: 1.0;
+}
+
+#css_video_ctrl_panel>div {
+	padding: 0;
+	margin: 0;
+	flex-shrink: 0;
+	/* Prevent shrinking of individual button containers */
+}
+
+#css_video_ctrl_panel img {
+	max-width: 100%;
+	height: auto;
+}
+
+#login_button {
+	position: absolute;
+	right: 3px !important;
+	margin: 0.85rem !important;
+}
+
+#css_language_switcher {
+	width: 90px !Important;
+	height: 30px !important;
+}
+
+
+#main_btn_group button {
+	height: 30px !important;
+	font-size: 11px !important;
+	font-weight: bold !important;
+	min-width: 100px !important;
+}
+
+
+#rowheader {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 1000;
+	height: 60px !important;
+	/* Adjust based on actual header height */
+	border: none !important;
+	border-top: none !important;
+}
+
+
+#footer_div {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	z-index: 1000;
+	height: 30px;
+	/* Adjust based on actual footer height */
+}
+
+.btn_bi_fixer::before,
+p#fence::before,
+.btn-with-icon-margin::before  {
+	margin-right: 5px;
+}
+
+/* Gimbal Control Zoom Slider Styles */
+#gimbal-ir-zoom-slider-vertical,
+#gimbal-zoom-slider-vertical {
+	-webkit-appearance: slider-vertical;
+	appearance: slider-vertical;
+	width: 16px !important;
+	height: 100px;
+	background: transparent;
+	outline: none;
+}
+
+#gimbal-ir-zoom-slider-vertical::-webkit-slider-thumb,
+#gimbal-zoom-slider-vertical::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: #0d6efd;
+	border: none;
+}
+
+#gimbal-ir-zoom-slider-vertical::-moz-range-thumb,
+#gimbal-zoom-slider-vertical::-moz-range-thumb {
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: #0d6efd;
+	border: none;
+}
+
+/* Dark skin for the ALTCHA widget — matches the darkly palette
+   (bs-primary #375a7f / bs-dark #303030 / warning accent #f39c12).
+   Custom props pierce the widget's shadow DOM via inheritance. */
+altcha-widget.css_altcha_dark {
+	--altcha-color-base: #303030;
+	--altcha-color-base-content: #dee2e6;
+	--altcha-color-neutral: #444444;
+	--altcha-color-neutral-content: #dee2e6;
+	--altcha-color-primary: #375a7f;
+	--altcha-color-primary-content: #ffffff;
+	--altcha-color-success: #00bc8c;
+	--altcha-color-success-content: #ffffff;
+	--altcha-border-color: #495057;
+	--altcha-border-radius: 8px;
+	--altcha-input-background-color: #303030;
+	--altcha-input-color: #dee2e6;
+	--altcha-checkbox-border-color: #6c757d;
+	--altcha-spinner-color: #f39c12;
+	--altcha-popover-color: #303030;
+	--altcha-switch-background-color: #444444;
+	--altcha-switch-toggle-color: #dee2e6;
+}

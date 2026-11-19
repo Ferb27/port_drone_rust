@@ -1,0 +1,26 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 7a1774f..8f228a4 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+-name = "de_auth_server"
+-version = "7.7.3"
++name = "de_fork_authenticator"
++version = "7.7.3-fork"
+ edition = "2021"
+ description = "DroneEngage Authentication Server: account login and management for GCS and agents, comm server selection over an S2S WebSocket, and the admin web interface."
+ authors = ["Mohammad Said Hefny <mohammad.hefny@gmail.com>"]
+diff --git a/server.config b/server.config
+index e688850..3057e23 100644
+--- a/server.config
++++ b/server.config
+@@ -74,7 +74,7 @@
+     // Set altcha_enabled=false for trusted/LAN installs. Leave
+     // altcha_hmac_secret empty to use an ephemeral per-boot secret (in-flight
+     // challenges die on restart); set a fixed secret to survive restarts.
+-    "altcha_enabled"            : true,
++    "altcha_enabled"            : false,
+     "altcha_hmac_secret"        : "",
+     "altcha_max_number"         : 100000,
+     "altcha_ttl_sec"            : 300,

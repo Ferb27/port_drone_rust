@@ -1,0 +1,44 @@
+diff --git a/package.json b/package.json
+index f814acb..d433f0b 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+-  "name": "andruavserver",
+-  "version": "5.6.2",
++  "name": "de_server",
++  "version": "5.7.0-fork",
+   "author": {
+     "name": "Mohammad Said Hefny",
+     "email": "mohammad.hefny@gmail.com"
+@@ -38,6 +38,6 @@
+     "udp-packet": "^2.0.0",
+     "uuid": "^9.0.0",
+     "ws": "^8.16.0",
+-    "droneengage_server_common": "git+ssh://git@github.com:DroneEngage/droneengage_server_common.git#v1.0.0"
++    "droneengage_server_common": "https://github.com/DroneEngage/droneengage_server_common.git#v1.0.0"
+   }
+ }
+diff --git a/server.config b/server.config
+index 98a9ea1..5660e39 100755
+--- a/server.config
++++ b/server.config
+@@ -1,7 +1,7 @@
+ {
+     "server_id"                     : "DE_CommSrv",
+-    "server_ip"                     : "::",
+-    "public_host"                   : "airgap.local",
++    "server_ip"                     : "0.0.0.0",
++    "public_host"                   : "127.0.0.1",
+     "server_port"                   : 9966,
+     "s2s_ws_target_ip"              : "127.0.0.1",
+     "s2s_ws_target_port"            : "19001",
+@@ -26,7 +26,7 @@
+     // s2s_auth_enabled is managed by the authenticator only; comm server always attempts S2S auth.
+     "s2s_my_private_key"            : "./ssl_local/DE_ServerComm_private.pem",
+     // Storage server endpoint for direct connection
+-    "enable_storage_server"         : true,
++    "enable_storage_server"         : false,
+     "storage_server_host"           : "127.0.0.1",
+     "storage_server_port"           : 9000,
+     // logging

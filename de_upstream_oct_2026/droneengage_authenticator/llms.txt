@@ -1,0 +1,134 @@
+# DroneEngage Authenticator
+
+## Project Summary
+DroneEngage Authenticator is the central authentication and authorization server for the DroneEngage/Andruav drone management ecosystem. It handles user registration, vehicle registration, authentication token generation, and assigns users/vehicles to communication servers using Ed25519 cryptographic authentication for server-to-server communication. It also provides a secured admin web interface (with optional web terminal) for managing users, communication servers, and SQL storage.
+
+## Tech Stack
+- **Language**: Rust (ported from Node.js/Express; replies, pages and console output are kept identical)
+- **Runtime**: tokio; HTTP/1.1 written by the server itself (Node-compatible header order and case)
+- **Database**: SQLite via rusqlite (bundled), the file (JSON) store, or the single account
+- **Authentication**: login cards + Ed25519 S2S authentication + bcrypt-hashed access codes and admin passwords
+- **Real-time**: tokio-tungstenite WebSockets for S2S and the web terminal (portable-pty)
+- **Templates**: minijinja (views/*.html), with the `template` layout on the views server
+- **Security**: helmet-3-compatible headers, CORS, CSRF (csurf cookie mode), rate limits, sessions, ALTCHA
+- **Shared crate**: droneengage_server_common (config, hashing, S2S, web sessions/CSRF/limiter)
+
+## Architecture
+Three independent servers running simultaneously:
+1. **API Server** (port 19408): REST API for authentication
+2. **Views Server** (port 8089): Admin web interface with EJS templating
+3. **S2S WebSocket Server** (port 19001): Server-to-Server communication with Ed25519 auth
+
+## Project Structure
+```
+andruav_authenticator/
+├── server.config          # JSON configuration (supports --config override, C-style comments allowed)
+├── Cargo.toml
+├── src/
+│   ├── main.rs            # andruavauth binary
+│   ├── cli.rs             # arguments, banner, store, listeners (S2S, API, views)
+│   ├── auth.rs            # fn_newLoginCard / fn_accountOperation / hardware / logout
+│   ├── accounts.rs        # database + account manager (file and SQLite), team admin
+│   ├── sessions.rs        # login cards
+│   ├── comm.rs            # comm server manager (selection, login requests, reports)
+│   ├── s2s.rs             # S2S WebSocket listener with the Ed25519 handshake
+│   ├── filedb.rs          # lowdb-compatible JSON store
+│   ├── sqldb.rs           # node-sqlite3-compatible binding and errors
+│   ├── altcha.rs          # ALTCHA challenges and verification
+│   ├── validator.rs perm.rs constants.rs config.rs jsv.rs
+│   ├── web/               # mod (routing), api (web+agent), admin, server (HTTP/1.1), headers, terminal, wiki
+│   └── bin/               # reset_access, migrate_file_db
+├── views/                 # admin, common, pages templates
+├── public/                # Static assets (bootstrap, xterm, qrcode)
+├── database/              # migrations/*.sql, README
+├── ssl_local/             # SSL certificates & S2S keys
+├── scripts/               # S2S key generation + release build
+├── tests/                 # cargo integration tests
+├── resources/             # Diagrams and static resources
+└── wiki/                  # Documentation
+```
+
+## Key Files
+- `src/cli.rs` - startup: config, banner, store, the three servers
+- `src/auth.rs` - login and account operations (authorization rules)
+- `src/accounts.rs` - storage operations for file and SQLite modes
+- `src/comm.rs` / `src/s2s.rs` - comm servers and their WebSocket channel
+- `src/web/api.rs` - /w and /agent routes; `src/web/admin.rs` - admin router
+- `src/validator.rs` / `src/perm.rs` - input validation and permission bits
+- `server.config` - JSON configuration
+
+## Coding Conventions
+- Each module names the JavaScript module it replaced and keeps its behaviour
+- Values from requests are serde_json::Value and follow JavaScript semantics (truthiness, ==, key order)
+- A thrown JavaScript exception is an `Err(String)` the router's catch answers
+
+## Authentication Flow
+1. User registration → access code generation → email (unless ignoreEmail)
+2. User login → session token generation → client uses token
+3. S2S: WebSocket connection → Ed25519 challenge → signature verification → connection established
+4. Admin: login with username/password (bcrypt-hashed) → CSRF-protected session → dashboard/servers/users/terminal
+
+## API Endpoints
+- Authentication: `/api/login`, `/api/register`, `/api/logout`, `/api/verify`
+- S2S: `/api/s2s/register`, `/api/s2s/servers`, WebSocket `/s2s`
+- Admin: `/admin` (or `/admin/<guid>`), `/admin/dashboard`, `/admin/servers`, `/admin/users`, `/admin/api/servers`, `/admin/sql`, `/admin/terminal`
+- Agent: `/agent/register`, `/agent/authenticate`, `/agent/servers`
+
+## Database Schema
+SQLite database with tables:
+- `users` (id, username, email, password_hash, access_code, created_at)
+- `comm_servers` (id, server_id, ip_address, port, public_key, registered_at)
+
+A migration tool (`migrate_file_db`) imports file-mode JSON and legacy CSV accounts into SQLite.
+
+## Security Features
+- Helmet.js for HTTP security headers
+- CORS configuration
+- CSRF protection (csurf) on admin interface
+- Rate limiting on API endpoints
+- SSL/TLS for all connections
+- Ed25519 cryptographic S2S authentication
+- bcrypt password hashing for admin credentials ($$HASH$$ directive)
+- Secure session secrets
+- Optional secret admin URL guid to hide the admin login
+- Configurable web terminal (disabled by default in hardened deployments)
+
+## Development
+```bash
+cargo build --release
+cp server.config server.config.local
+# Edit server.config.local
+./target/release/andruavauth
+```
+
+## Testing
+```bash
+cargo test
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+```
+
+## S2S Key Generation
+```bash
+cd scripts
+./gen_s2s_keys.sh <server_id>
+```
+
+## Build
+```bash
+scripts/build.sh   # cargo build --release, binaries + runtime files in build/
+```
+
+## Related Projects
+- andruav_server - Communication server
+- andruav_webclient_react - React web client
+- Mavlink3DMap2 - MAVLink 3D map integration
+- droneengage_storage_server - Storage server
+- droneengage_performance_monitor - Performance monitor
+
+## Documentation
+- README.md - User-facing documentation
+- wiki/ - Detailed documentation (AuthenticationFlow, DatabaseSchema, APIEndpoints, Configuration, S2SAuthentication, AdminWebInterface, Architecture)
+
+## Version
+7.7.0

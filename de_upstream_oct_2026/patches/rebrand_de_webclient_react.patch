@@ -1,0 +1,13 @@
+diff --git a/package.json b/package.json
+index 80fb29c7..6fb9b6ea 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+-  "name": "droneengage_webclient",
+-  "version": "3.1.0",
++  "name": "de_webclient_react",
++  "version": "5.7.0-fork",
+   "build_number": "20260918-01",
+   "description": "DroneEngage WebClient GCS Control Station.",
+   "author": {

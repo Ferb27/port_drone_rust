@@ -1,0 +1,193 @@
+import React from 'react';
+import { withTranslation } from 'react-i18next';
+import Draggable from 'react-draggable';
+
+import { EVENTS as js_event } from '../js/events/js_eventList.js';
+import { js_eventEmitter } from '../js/events/js_eventEmitter.js';
+import { js_localStorage } from '../js/state/js_localStorage.js';
+import {EventBridge} from '../js/hooks/EventBridge.jsx';
+import * as js_andruavMessages from '../js/protocol/messages/js_andruavMessages.js';
+import { CONST_FEATURE as js_siteConfig_CONST_FEATURE } from '../js/config/js_siteConfig.js';
+import ClssDialogBase from './dialogs/jsc_dialog_base.jsx';
+
+/**
+ * "News tail" - a scrolling/list ticker of active (non-disabled, non-expired)
+ * news, newest first. Loaded once on mount (EE_News_Loaded resync/reply) and
+ * updated live as items are pushed (EE_News_Push).
+ */
+class ClssNewsDisplay extends ClssDialogBase {
+    constructor(props) {
+        super(props);
+
+        this.state = {
+            ...this.state,
+            newsById: {},
+            isVisible: js_localStorage.fn_getNewsVisible()
+        };
+
+        this.m_flag_mounted = false;
+        this.m_panelRef = React.createRef();
+
+        this.fn_onNewsLoaded = this.fn_onNewsLoaded.bind(this);
+        this.fn_onNewsPush = this.fn_onNewsPush.bind(this);
+        this.fn_onNewsToggle = this.fn_onNewsToggle.bind(this);
+
+        // Event subscriptions are owned by EventBridge siblings rendered
+        // below (see render()), which auto-unsubscribe on unmount via
+        // useEventSubscription.
+    }
+
+    componentDidMount() {
+        this.m_flag_mounted = true;
+        this.modalRef = this.m_panelRef;
+        super.componentDidMount();
+    }
+
+    componentWillUnmount() {
+        this.m_flag_mounted = false;
+        // Unsubscription is handled automatically by the EventBridge
+        // siblings (useEventSubscription) on unmount.
+    }
+
+    fn_isMounted() {
+        return this.m_flag_mounted;
+    }
+
+    fn_isActive(p_item) {
+        if (!p_item || p_item.disabled) return false;
+        if (p_item.expires_at && (p_item.expires_at * 1000) <= Date.now()) return false;
+        return true;
+    }
+
+    // p_payload here is the LoadNews reply's msgPayload, shaped { s: 'OK', news: [...] } (or an error string)
+    fn_onNewsLoaded(p_payload) {
+        if (this.fn_isMounted() === false) return;
+        if (!p_payload || !Array.isArray(p_payload.news)) return;
+
+        const newsById = {};
+        p_payload.news.forEach(item => { newsById[item.id] = item; });
+        this.setState({ newsById });
+        // Everything on screen counts as seen so a later LoadNews resync
+        // does not flag it as new.
+        this.fn_markNewsSeen(p_payload.news.map(item => item && item.id));
+    }
+
+    fn_markNewsSeen(p_ids) {
+        if (this.state.isVisible !== true) return;
+        js_localStorage.fn_addNewsSeenIds(p_ids);
+    }
+
+    // p_payload here is the unsolicited NewsPush's msgPayload: a single news item
+    // (possibly just { id, disabled: 1 } for a disable/delete).
+    fn_onNewsPush(p_payload) {
+        if (this.fn_isMounted() === false) return;
+        if (!p_payload || !p_payload.id) return;
+
+        this.setState(prevState => ({
+            newsById: { ...prevState.newsById, [p_payload.id]: { ...prevState.newsById[p_payload.id], ...p_payload } }
+        }));
+        this.fn_markNewsSeen([p_payload.id]);
+    }
+
+    fn_onNewsToggle(p_data) {
+        if (this.fn_isMounted() === false) return;
+        const visible = p_data && p_data.visible === true;
+        js_localStorage.fn_setNewsVisible(visible);
+        this.setState({ isVisible: visible });
+        if (visible === true) {
+            js_localStorage.fn_addNewsSeenIds(Object.keys(this.state.newsById));
+        }
+    }
+
+    fn_getActiveNews() {
+        return Object.values(this.state.newsById)
+            .filter(item => this.fn_isActive(item))
+            .sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    }
+
+    fn_getPriorityClass(p_priority) {
+        if (p_priority === js_andruavMessages.CONST_NEWS_PRIORITY_CRITICAL) return 'text-danger';
+        if (p_priority === js_andruavMessages.CONST_NEWS_PRIORITY_WARNING) return 'text-warning';
+        return 'text-info';
+    }
+
+    fn_getScopeLabel(p_scope) {
+        return p_scope === js_andruavMessages.CONST_NEWS_SCOPE_GLOBAL ? 'Global' : 'Account';
+    }
+
+    fn_toggleCompose() {
+        js_eventEmitter.fn_dispatch(js_event.EE_onNewsWriteToggle, { visible: true });
+    }
+
+    fn_closeDialog() {
+        this.setState({ isVisible: false });
+        js_eventEmitter.fn_dispatch(js_event.EE_onNewsToggle, { visible: false });
+    }
+
+    fn_getCurrentPartyID() {
+        return null;
+    }
+
+    render() {
+        const { t } = this.props;
+        const title = t('news.title') || 'News';
+
+        const news = this.fn_getActiveNews();
+
+        const sendingDisabled = js_siteConfig_CONST_FEATURE
+            && js_siteConfig_CONST_FEATURE.DISABLE_SENDING_NEWS === true;
+
+        const composeButton = sendingDisabled ? null : (
+            <button
+                type="button"
+                className="btn btn-sm btn-link text-dark float-end p-0 ms-2"
+                title={t('news.compose') || 'Post news'}
+                onClick={() => this.fn_toggleCompose()}
+            >
+                +
+            </button>
+        );
+
+        // EventBridge siblings must stay mounted even while the panel is
+        // hidden: the EE_onNewsToggle subscription is what re-shows the
+        // panel, and EE_News_Push accrues unread counts while hidden.
+        // They render null, so they don't affect layout.
+        return (
+            <>
+            <EventBridge eventName={js_event.EE_News_Loaded} onEvent={(p_payload) => this.fn_onNewsLoaded(p_payload)} />
+            <EventBridge eventName={js_event.EE_News_Push} onEvent={(p_payload) => this.fn_onNewsPush(p_payload)} />
+            <EventBridge eventName={js_event.EE_onNewsToggle} onEvent={(p_data) => this.fn_onNewsToggle(p_data)} />
+            {this.state.isVisible === true && (
+            <Draggable nodeRef={this.m_panelRef} handle=".js-draggable-handle" cancel="button, input, select, textarea">
+                <div className="card css_ontop news-display-panel" ref={this.m_panelRef}>
+                    {this.fn_renderDialogHeader(title, false, composeButton)}
+                    {!this.state.isMinimized && (
+                        <div className="card-body p-2 news-display-body">
+                            {news.length === 0 && (
+                                <div className="text-muted text-center small">{t('news.no_news') || 'No news'}</div>
+                            )}
+                            {news.map(item => (
+                                <div key={item.id} className="small mb-2 border-bottom pb-1">
+                                    <div>
+                                        <span className={this.fn_getPriorityClass(item.priority)}>
+                                            <strong>{item.title || this.fn_getScopeLabel(item.scope)}</strong>
+                                        </span>
+                                        {' '}
+                                        <span className="text-muted">
+                                            {item.created_at ? new Date(item.created_at * 1000).toLocaleString() : ''}
+                                        </span>
+                                    </div>
+                                    <div>{item.body}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </Draggable>
+            )}
+            </>
+        );
+    }
+}
+
+export default withTranslation()(ClssNewsDisplay);

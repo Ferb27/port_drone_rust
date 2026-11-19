@@ -1,0 +1,53 @@
+report.txt: vá fork lên upstream Rust (PROMPT_CLAUDE.md), 2026-11-18
+Working tree: de_upstream_oct_2026/droneengage_{server,authenticator} (uncommitted). 3 repo còn lại không đổi. de_fork/ không đổi.
+
+1) git apply --check trên clone sạch origin/master (server 20900c0, auth 9274556), thứ tự P trước rebrand
+  droneengage_server        <- P4_de_server_rust.patch         OK   src/server.rs +12/-1, src/comm_server.rs +1/-1
+  droneengage_server        <- rebrand_de_server.patch         OK   Cargo.toml +2/-2, server.config +3/-3
+  droneengage_authenticator <- P3_de_authenticator_rust.patch  OK   src/web/mod.rs +1/-1
+  droneengage_authenticator <- rebrand_de_authenticator.patch  OK   Cargo.toml +2/-2, server.config +1/-1
+  Tổng: server +18/-7, auth +4/-4.
+
+2) Nội dung
+  P3  src/web/mod.rs:97     agent_login_limit: SlidingLimiter::new(10) -> 1000
+  P4  src/server.rs         Env.public_port <- env de_public_port; fn public_port_value() = de_public_port (parse u64) || server_port_value()
+                            watchdog server.rs:130 ("serverPort"); hàm ở server.rs:99; dùng public_port_value()
+      src/comm_server.rs:38 login reply CONST_CS_SERVER_PORT ("h") dùng public_port_value(). Port listen vẫn dùng server_port_value().
+  Rebrand server  Cargo.toml  name "de_fork_server", version "6.0.2-fork" ([lib] andruavserver, [[bin]] andruavmainserver giữ nguyên)
+                  server.config  server_ip "0.0.0.0", public_host "127.0.0.1", enable_storage_server false (AirGap của fork)
+  Rebrand auth    Cargo.toml  name "de_fork_authenticator", version "7.7.3-fork" ([lib] de_auth_server, các [[bin]] giữ nguyên)
+                  server.config  altcha_enabled false
+
+3) Chỗ lệch so với PROMPT_CLAUDE.md (đã sửa theo code thật)
+  - Tên repo "droneenemy_*" không tồn tại; tên thật là droneengage_*. Lệnh trong mục "Chạy" phải đổi tên này.
+  - P3: prompt có "SldingLimiter" (typo) và hunk header @@ -97,6 +97,7 @@ sai số dòng; patch thật là +1/-1.
+  - P4: prompt viết field Env "server_port" đọc env "server_port", nhưng thật ra là comm_server_port <- de_comm_server_port.
+    "Some(p) => Value::from(p as u32)" thiếu Some(...) nên không compile; bản này dùng Some(json!(p)).
+    comm_server.rs không có dòng '"port": self.server_port_value()'; dòng thật là v_reply_d.insert(CONST_CS_SERVER_PORT, ...).
+  - Rebrand: prompt giả định đang là name "de_server"/version "6.0.2", nhưng tree đang là de_server/5.7.0-fork (lần vá trước).
+    Đã đổi sang de_fork_* / *-fork theo prompt. Dấu "}" thừa sau version auth đã bỏ.
+    server.config KHÔNG có key server_name / server_version, nên không có 2 dòng đó để đổi. Chỉ có server_id "DE_CommSrv",
+    và tôi giữ nguyên vì auth định danh comm server theo id này.
+  - Conflict "dòng 26": không xảy ra khi patch áp trên master. Block udp_relay (dòng 18-22) giữ nguyên upstream, không merge.
+  - C4: bản trong prompt gửi frame raw TCP tự chế (0xDE + id) tới 9967. Server không nói giao thức đó (WSS + JSON sau
+    login/de_auth), nên kết quả sẽ vô nghĩa. Thêm nữa run() không thu kết quả. C4_router_6546.js được viết lại theo giao thức thật.
+    check3 phải nối thẳng 9966 vì delay proxy tự buffer, che backpressure. Ý "chỉ frame mới nhất sống" không đúng với
+    outbound_guard: guard bỏ mọi frame latest_wins khi buffer >= high-water, không giữ frame mới nhất.
+
+4) Build / test (WSL, cargo 1.100.0, copy ở /tmp/rv_rust)
+  cargo build --release: server exit 0 (version "6.0.2-fork"), auth exit 0 (version "7.7.3-fork"); Cargo.lock tự đổi tên package.
+  cargo test: lần chạy trước trên cùng code (chỉ khác tên package): server 88/88, auth 34/35.
+    Fail duy nhất là web_app::admin_login_page_and_csrf (tests/web_app.rs:93, cookie "_csrf="), test này cũng fail trên upstream sạch 9274556.
+  Lần này chạy lại cargo test thì WSL tự khởi động lại 2 lần (Wsl/Service/ERROR_NETNAME_DELETED), làm hỏng binary đang build dở.
+  Tôi đã rebuild sạch rồi kiểm tra binary chạy được. Không chạy lại test.
+
+5) C4 (node C4_router_6546.js --host 127.0.0.1 --port 9967 --direct-port 9966), stack Rust đã vá, xem c4.txt
+  login: auth trả port 9967 = de_public_port (P4 hoạt động); 3 party de_auth OK
+  check1 6503 ms {q:4294967295, t:123456}                      PASS (nguyên vẹn qua header-scan routing)
+  check1 6546 AI_OBSERVATIONS ms {q:7, t:123457, obs}          PASS
+  check2 9021 x64: socket sống, 64/64 reply {"error":"bad_request"} (không có relay / ms không đúng schema relay)
+      PASS theo tiêu chí "không rớt socket". Thứ tự KHÔNG kiểm được vì reply không echo seq.
+  check3 6503 latest_wins (receiver pause, 100 x 32 KiB): nhận 39, drop 61, q cuối nhận được = 96 (q=99 bị bỏ), receiver không bị terminate
+      PASS (guard bỏ frame khi vượt high-water 256 KiB)
+
+6) Gate B0 (lần trước, cùng code P3/P4 + config rebrand): τ=0 39.67±1.33 m (PASS 38-44), τ=1s 45.78±1.53 m. Đổi tên Cargo không đụng tới runtime.

@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.pcap binary
+*.BIN binary
+*.bin binary
+*.png binary
+*.jpg binary
+*.gz binary
+*.xlsx binary
+*.docx binary

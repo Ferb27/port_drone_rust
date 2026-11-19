@@ -1,0 +1,47 @@
+.vscode/
+downloads/
+node_modules/
+package-lock.json
+
+/src/comm_server/ssl/*
+log/
+*.log
+*.heapsnapshot
+logs/
+terrain/
+*.log
+*.tlog
+*.bin
+*.parm
+*.raw
+*.pem
+
+checks.json
+
+TODO.txt
+/wiki/local
+
+build/
+
+# Local config override (merged on top of server.config at runtime)
+server.config.local
+
+.playwright-mcp/
+*.local.sh
+
+# standalone test build outputs
+src/test/test_sv_core
+src/test/*.o
+
+# S2S shared secret (chmod 600 — never commit)
+s2s_shared_secret.key
+
+# Rust build output
+target/
+
+# never publish: private keys, per-machine config, shared secrets
+*.key
+*_private.pem
+s2s_shared_secret.key*
+.env.local
+.vscode/

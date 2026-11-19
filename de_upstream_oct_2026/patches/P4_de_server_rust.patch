@@ -1,0 +1,58 @@
+diff --git a/src/comm_server.rs b/src/comm_server.rs
+index b06035b..8208798 100644
+--- a/src/comm_server.rs
++++ b/src/comm_server.rs
+@@ -35,7 +35,7 @@ pub fn login_request_reply(p_server: &Server, p_cmd: &Value) -> Value {
+     if let Some(h) = p_server.cfg.get("public_host") {
+         v_reply_d.insert(CONST_CS_SERVER_PUBLIC_HOST.into(), h.clone());
+     }
+-    if let Some(p) = p_server.server_port_value() {
++    if let Some(p) = p_server.public_port_value() {
+         v_reply_d.insert(CONST_CS_SERVER_PORT.into(), p);
+     }
+     if let Some(f) = v_d.and_then(|d| d.get(CONST_CS_LOGIN_TEMP_KEY)) {
+diff --git a/src/server.rs b/src/server.rs
+index aa6f2eb..bd35af0 100644
+--- a/src/server.rs
++++ b/src/server.rs
+@@ -26,6 +26,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+ pub struct Env {
+     /// de_comm_server_port
+     pub comm_server_port: Option<String>,
++    /// de_public_port (fork P4: port advertised to clients when running behind a proxy)
++    pub public_port: Option<String>,
+     /// de_s2s_shared_secret
+     pub s2s_shared_secret: Option<String>,
+     /// NODE_EXTRA_CA_CERTS (extra CA file trusted on the AUTH link)
+@@ -36,6 +38,7 @@ impl Env {
+     pub fn from_process() -> Env {
+         Env {
+             comm_server_port: std::env::var("de_comm_server_port").ok(),
++            public_port: std::env::var("de_public_port").ok(),
+             s2s_shared_secret: std::env::var("de_s2s_shared_secret").ok(),
+             extra_ca_certs: std::env::var("NODE_EXTRA_CA_CERTS").ok(),
+         }
+@@ -92,6 +95,14 @@ impl Server {
+         }
+     }
+ 
++    /// Fork P4: port advertised to clients: `de_public_port` (as int) || server_port_value().
++    pub fn public_port_value(&self) -> Option<Value> {
++        match self.env.public_port.as_deref().and_then(|p| p.trim().parse::<u64>().ok()) {
++            Some(p) => Some(json!(p)),
++            None => self.server_port_value(),
++        }
++    }
++
+     /// getServerOriginID(): server_id, or 'unknown'.
+     pub fn origin_id(&self) -> String {
+         self.cfg.server_id()
+@@ -116,7 +127,7 @@ impl Server {
+             if let Some(v) = self.cfg.get("public_host") {
+                 v_obj.insert("public_host".into(), v.clone());
+             }
+-            if let Some(v) = self.server_port_value() {
++            if let Some(v) = self.public_port_value() {
+                 v_obj.insert("serverPort".into(), v);
+             }
+             v_obj.insert("accounts".into(), json!(v_hub.unit_keys()));

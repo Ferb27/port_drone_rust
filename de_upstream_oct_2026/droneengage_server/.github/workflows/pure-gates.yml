@@ -1,0 +1,29 @@
+# pure-gates - every push.
+#
+#   fmt      cargo fmt --check
+#   clippy   cargo clippy --all-targets, warnings are errors
+#   tests    cargo test - unit and integration tests, in-process (the
+#            UDP relay tests skip when no relay binary is available; set
+#            DE_UDP_RELAY_BIN to run them).
+#
+# No external servers, no SITL, no sim bring-up.
+name: pure-gates
+on: [push, pull_request]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: toolchain
+        run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
+
+      - name: fmt
+        run: cargo fmt --check
+
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: tests
+        run: cargo test

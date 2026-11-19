@@ -1,0 +1,40 @@
+# pure-gates - every push.
+#
+#   fmt      cargo fmt --check
+#   clippy   cargo clippy --all-targets, warnings are errors
+#   tests    cargo test - validation, permissions, the file and SQLite
+#            account stores, account / team operations, the comm server
+#            manager, S2S verification and the web app in-process.
+#
+# No comm server, no SITL, no sim bring-up.
+name: pure-gates
+on: [push, pull_request]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      SERVER_COMMON_PAT: ${{ secrets.SERVER_COMMON_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: toolchain
+        run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
+
+      # droneengage_server_common is a private git dependency: with a
+      # SERVER_COMMON_PAT secret (a token with read access) cargo fetches it
+      # over https with the git CLI.
+      - name: private dependency access
+        if: env.SERVER_COMMON_PAT != ''
+        run: |
+          git config --global url."https://x-access-token:${SERVER_COMMON_PAT}@github.com/".insteadOf "https://github.com/"
+          echo "CARGO_NET_GIT_FETCH_WITH_CLI=true" >> "$GITHUB_ENV"
+
+      - name: fmt
+        run: cargo fmt --check
+
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: tests
+        run: cargo test

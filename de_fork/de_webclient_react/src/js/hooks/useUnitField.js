@@ -1,0 +1,40 @@
+import { useSyncExternalStore, useCallback } from 'react';
+import * as js_session from '../state/session.js';
+import { subscribeUnitField } from '../store/unitStore.js';
+
+/**
+ * Reactively reads `unit[fieldPath]` (dot-path string, e.g.
+ * "m_tracker.m_active") and only re-renders the calling component when
+ * THAT field changes — not on every coarse EE_unitUpdated for the whole
+ * unit.
+ *
+ * This replaces the hand-rolled
+ *   constructor: fn_subscribe / shouldComponentUpdate(m_update counter) /
+ *   componentWillUnmount: fn_unsubscribe
+ * pattern duplicated across gadget components. There is no manual dirty
+ * flag and no listener to forget to unsubscribe — useSyncExternalStore
+ * handles subscribe/unsubscribe and re-render gating by construction.
+ *
+ * @param {string} partyId - unit party id (p_unit.getPartyID())
+ * @param {string} fieldPath - dot-path into the unit object, e.g. "m_tracker.m_active"
+ * @returns {*} the current value at unit[fieldPath], or undefined if the
+ *   unit is not present / the path does not resolve.
+ */
+export function useUnitField(partyId, fieldPath) {
+    const subscribe = useCallback(
+        (onChange) => {
+            if (!partyId || !fieldPath) return () => {};
+            return subscribeUnitField(partyId, fieldPath, onChange);
+        },
+        [partyId, fieldPath]
+    );
+    const getSnapshot = useCallback(() => {
+        if (!partyId || !fieldPath) return undefined;
+        const list = js_session.fn_getAndruavUnitList();
+        if (!list) return undefined;
+        const unit = list.fn_getUnit(partyId);
+        if (!unit) return undefined;
+        return fieldPath.split('.').reduce((obj, key) => (obj == null ? obj : obj[key]), unit);
+    }, [partyId, fieldPath]);
+    return useSyncExternalStore(subscribe, getSnapshot);
+}

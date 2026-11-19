@@ -1,0 +1,36 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 0196c0a..6b436b3 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+-name = "andruavserver"
+-version = "6.0.2"
++name = "de_fork_server"
++version = "6.0.2-fork"
+ edition = "2021"
+ description = "DroneEngage communication server: WebSocket messaging between drone units and ground control stations, S2S relay and UDP relay brokering."
+ authors = ["Mohammad Said Hefny <mohammad.hefny@gmail.com>"]
+diff --git a/server.config b/server.config
+index 6e96aef..a6aeb1b 100755
+--- a/server.config
++++ b/server.config
+@@ -1,7 +1,7 @@
+ {
+     "server_id"                     : "DE_CommSrv",
+-    "server_ip"                     : "::",
+-    "public_host"                   : "airgap.local",
++    "server_ip"                     : "0.0.0.0",
++    "public_host"                   : "127.0.0.1",
+     "server_port"                   : 9966,
+     "s2s_ws_target_ip"              : "127.0.0.1",
+     "s2s_ws_target_port"            : "19001",
+@@ -53,7 +53,7 @@
+     // auto-generate the file: a locally generated secret would never match.
+     "s2s_shared_secret_file"        : "./s2s_shared_secret.key",
+     // Storage server endpoint for direct connection
+-    "enable_storage_server"         : true,
++    "enable_storage_server"         : false,
+     "storage_server_host"           : "127.0.0.1",
+     "storage_server_port"           : 9000,
+     // logging

@@ -1,0 +1,274 @@
+import $ from 'jquery'; 
+import 'jquery-ui-dist/jquery-ui.min.js';
+import 'jquery-knob/dist/jquery.knob.min.js';
+
+import React    from 'react';
+import Draggable from "react-draggable";
+
+import { subscribeUnitField } from '../../js/store/unitStore.js';
+import {fn_doYAW} from '../../js/app/js_main.js'
+import * as js_helpers from '../../js/helpers/js_helpers.js';
+import ClssDialogBase from './jsc_dialog_base.jsx';
+import { fn_closeDialog as fn_closeDialogService } from '../../js/app/dialogService.js';
+
+export default class ClssYawDialog extends ClssDialogBase
+{
+    constructor()
+    {
+        super();
+        this.state = {
+			...this.state,
+			'm_update': 0,
+		};
+        
+        this.m_flag_mounted = false;
+
+        this.key = Math.random().toString();
+        
+        this.modal_ctrl_yaw = React.createRef();
+        this.yaw_knob = React.createRef();
+
+        this.m_actual_angle_deg = 0;
+        this.m_selected_angle_deg = 0;
+        this.m_unsubs = [];
+
+        // Event subscriptions are owned by EventBridge siblings rendered
+        // below (see render()), which auto-unsubscribe on unmount via
+        // useEventSubscription.
+
+    }
+
+
+    componentDidMount () {
+        this.modalRef = this.modal_ctrl_yaw;
+        super.componentDidMount();
+        this.m_flag_mounted = true;
+        if (this.props.dialogProps) this.fn_displayDialog(this, this.props.dialogProps?.unit);
+    }
+
+
+    componentWillUnmount ()
+    {
+        for (const fn of this.m_unsubs) fn();
+        this.m_unsubs = [];
+    }
+
+    
+    fn_displayDialog(p_me, p_andruavUnit)
+    {
+        if (p_andruavUnit == null) {
+		    return;
+		}
+
+        p_me.p_andruavUnit = p_andruavUnit;
+        p_me.p_onApply = p_me.props.dialogProps?.onApply || null;
+        p_me.m_actual_angle_deg = p_me.fn_getCurrentYawDeg(p_andruavUnit);
+        p_me.m_selected_angle_deg = p_me.m_actual_angle_deg;
+
+        // Field-granular: subscribe to yaw changes for this unit, replacing
+        // the coarse EE_unitNavUpdated trigger.
+        for (const fn of p_me.m_unsubs) fn();
+        p_me.m_unsubs = [];
+        const partyId = p_andruavUnit.getPartyID();
+        p_me.m_unsubs.push(subscribeUnitField(partyId, 'm_Nav_Info.p_Orientation.yaw', () => {
+            p_me.fn_onUnitNavUpdated(p_andruavUnit);
+        }));
+
+        if (p_me.m_flag_mounted === false)return ;
+
+        p_me.setState({'m_update': p_me.state.m_update +1});
+
+        p_me.modal_ctrl_yaw.current.style.display = 'block';
+		setTimeout(function () {
+            p_me.fn_initKnob();
+            p_me.fn_setKnobValue(p_me.m_selected_angle_deg);
+        }, 0);
+    }
+
+
+    fn_onUnitNavUpdated(p_andruavUnit)
+    {
+        if (this.m_flag_mounted === false || this.p_andruavUnit == null || p_andruavUnit == null) return;
+        if (this.p_andruavUnit.getPartyID() !== p_andruavUnit.getPartyID()) return;
+
+        this.m_actual_angle_deg = this.fn_getCurrentYawDeg(p_andruavUnit);
+
+        if (this.modal_ctrl_yaw.current != null && this.modal_ctrl_yaw.current.style.display === 'block')
+        {
+            this.setState({'m_update': this.state.m_update +1});
+        }
+    }
+
+
+    fn_getCurrentYawDeg(p_andruavUnit)
+    {
+        return (js_helpers.CONST_RADIUS_TO_DEGREE * ((p_andruavUnit.m_Nav_Info.p_Orientation.yaw + js_helpers.CONST_PTx2) % js_helpers.CONST_PTx2));
+    }
+
+
+    fn_setKnobValue(p_angle)
+    {
+        if (this.yaw_knob == null || this.yaw_knob.current == null) return;
+        const c_angle = parseFloat(p_angle) || 0;
+        this.yaw_knob.current.value = c_angle;
+        $(this.yaw_knob.current).val(c_angle).trigger('change');
+    }
+
+
+	fn_initKnob()
+	{
+		if (this.yaw_knob === null || this.yaw_knob === undefined) return;
+		if (this.yaw_knob.current === null || this.yaw_knob.current === undefined) return;
+
+		if (this.yaw_knob.current.dataset && this.yaw_knob.current.dataset.knobInitialized === '1') {
+			return;
+		}
+
+		const $knob = $(this.yaw_knob.current);
+		if (typeof $knob.knob !== 'function') return;
+
+		$knob.knob({
+			fgColor: "#3671AB",
+			bgColor: "#36AB36",
+			thickness: 0.3,
+			cursor: 10,
+			displayPrevious: true,
+			format: function (value) {
+				return value + '°';
+			},
+			'mousewheel': function (event) {
+				event.preventDefault();
+			},
+			'touchstart': function (event) {
+				event.preventDefault();
+			},
+			'change': (value) => {
+				this.m_selected_angle_deg = parseFloat(value) || 0;
+				if (this.m_flag_mounted === true)
+				{
+					this.setState({'m_update': this.state.m_update +1});
+				}
+			},
+			'release': (value) => {
+				this.m_selected_angle_deg = parseFloat(value) || 0;
+			}
+		});
+
+		$knob.css({ display: 'inline', padding: '0px 10px' });
+
+		if (this.yaw_knob.current.dataset) {
+			this.yaw_knob.current.dataset.knobInitialized = '1';
+		}
+	}
+
+
+    fn_initDialog()
+    {
+        this.yaw_knob.current.value = 0;
+        this.modal_ctrl_yaw.current.style.display = 'none';
+        super.fn_initDialog();
+    }
+
+    fn_getCurrentPartyID() {
+        if (this.p_andruavUnit) {
+            return this.p_andruavUnit.getPartyID();
+        }
+        return null;
+    }
+
+    fn_onYaw(e)
+    {
+        const target_angle = parseInt(this.yaw_knob.current.value);
+        if (typeof this.p_onApply === 'function') {
+            // In callback mode, pass only the target angle; direction will be computed per-unit by the caller
+            this.p_onApply(this.p_andruavUnit, target_angle);
+        }
+        else {
+            const target_angle_deg = target_angle;
+            const current_angle_deg = this.fn_getCurrentYawDeg(this.p_andruavUnit).toFixed(1);
+            let direction = js_helpers.isClockwiseAngle(current_angle_deg, target_angle_deg);
+            fn_doYAW(this.p_andruavUnit, target_angle, 0, !direction, false);
+        }
+    }
+
+    fn_Reset()
+    {
+        this.m_selected_angle_deg = 0;
+        this.fn_setKnobValue(0);
+        if (typeof this.p_onApply === 'function') {
+            // -1 indicates reset-to-heading; caller will handle direction per-unit
+            this.p_onApply(this.p_andruavUnit, -1);
+        }
+        else {
+            fn_doYAW(this.p_andruavUnit, -1, 0, true, false);
+        }
+        if (this.m_flag_mounted === true)
+        {
+            this.setState({'m_update': this.state.m_update +1});
+        }
+    }
+
+    fn_closeDialog()
+    {
+        fn_closeDialogService();
+    }
+
+
+    render ()
+    {
+        const c_actual_angle = this.m_actual_angle_deg;
+        const c_rad = (c_actual_angle - 90) * js_helpers.CONST_DEGREE_TO_RADIUS;
+        const c_marker_radius = 75;
+        const c_center = 100; // Adjusted for jquery-knob padding (90 + 10px)
+        const c_marker_size = 15;
+        const c_red_left = c_center + (Math.cos(c_rad) * c_marker_radius) - (c_marker_size / 2);
+        const c_red_top = c_center + (Math.sin(c_rad) * c_marker_radius) - (c_marker_size / 2);
+
+        return (
+            <Draggable nodeRef={this.modal_ctrl_yaw} handle=".js-draggable-handle" cancel="button, input, textarea, select, option, a">
+                <div key={this.key + "modal_ctrl_yaw"} id="modal_ctrl_yaw" title="YAW Control" className="card css_ontop border-light p-2" ref={this.modal_ctrl_yaw}>
+                    {/* EE_unitNavUpdated retired for this dialog: yaw field-store subscription in fn_displayDialog */}
+					{this.fn_renderDialogHeader('YAW' + (this.p_andruavUnit ? ' of ' + this.p_andruavUnit.m_unitName : ''))}
+					{!this.state.isMinimized && (
+					<div className="card-body">
+						<div id="yaw_knob_out" className="form-group text-centermodal_dialog_style">
+						<div style={{position: 'relative', width: '180px', height: '180px', margin: '0 auto'}}>
+						<input id="yaw_knob" className=" input-sm dial" data-width="180" data-height="180" data-min="0"
+							data-max="360" defaultValue="0"
+                            ref = {this.yaw_knob} />
+						<div
+                                style={{
+                                    position: 'absolute',
+                                    width: c_marker_size + 'px',
+                                    height: c_marker_size + 'px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#d9534f',
+                                    border: '2px solid #ffffff',
+                                    boxShadow: '0 0 4px rgba(0,0,0,0.5)',
+                                    left: c_red_left + 'px',
+                                    top: c_red_top + 'px',
+                                    pointerEvents: 'none'
+                                }}
+                            />
+						</div>
+
+						<div className="text-center mt-2">
+							<span className="me-3" style={{color: '#3671AB'}}>Selected: {this.m_selected_angle_deg.toFixed(1)}°</span>
+							<span style={{color: '#d9534f'}}>Actual: {this.m_actual_angle_deg.toFixed(1)}°</span>
+						</div>
+						</div> 
+					</div>
+					)}
+					<div id="modal_yaw_knob_footer" className="form-group text-center ">
+						{this.fn_renderDialogFooter(
+							<>
+								<button id="btnYaw" type="button" className="btn btn-sm btn-danger" onClick={(e)=>this.fn_onYaw(e)}>YAW</button>
+								<button id="btnResetYaw" type="button" className="btn btn-sm btn-warning" onClick={(e)=>this.fn_Reset(e)}>reset YAW</button>
+							</>
+						)}
+					</div>
+				</div>
+            </Draggable>
+        );
+    }
+}

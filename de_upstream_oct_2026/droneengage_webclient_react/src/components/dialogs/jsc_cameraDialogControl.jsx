@@ -1,0 +1,418 @@
+import 'jquery';
+import * as js_session from '../../js/state/session.js';
+import 'jquery-ui-dist/jquery-ui.min.js';
+
+import React    from 'react';
+import Draggable from "react-draggable";
+
+import * as js_andruavMessages from '../../js/protocol/messages/js_andruavMessages'
+import * as js_common from '../../js/helpers/js_common.js'
+
+import {fn_VIDEO_login, fn_VIDEO_Record} from '../../js/app/js_main.js';
+import ClssDialogBase from './jsc_dialog_base.jsx';
+import { fn_closeDialog as fn_closeDialogService, js_dialogs } from '../../js/app/dialogService.js';
+import ClssStillImageGallery from './jsc_stillImageGallery.jsx';
+
+class ClssCameraDevice extends React.Component {
+
+    constructor ()
+    {
+        super ();
+        this.state =
+        {
+            v_track: null,
+        };
+    }
+
+    fn_videoStream()
+    {
+        const v_track = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number];
+
+        // Tell the unit which camera to actually capture from (built-in front/back, or e.g. an
+        // attached USB webcam reported in CAMERA_LIST_MESSAGE) before joining its WebRTC track -
+        // same AndruavMessage_CameraSwitch already used by the live-view "switch camera" button,
+        // just driven by the selected track id instead of a plain front/back toggle.
+        js_session.fn_getAndruavFacade().API_SwitchCamera(this.props.prop_session.m_unit.getPartyID(), v_track.id);
+
+        fn_VIDEO_login (this.props.prop_session, v_track.id);
+        js_dialogs.fn_hideStream();
+    }
+
+    fn_videoRecord(p_startRecord)
+    {
+        const v_track = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number];
+        
+        fn_VIDEO_Record (this.props.prop_session, v_track.id, p_startRecord);
+    }
+
+    fn_oneShot ()
+    {
+        if (this.props.prop_session == null) return ;
+        let camera_index;
+        if (this.props.prop_session.m_unit.fn_getIsDE() === true) {
+            camera_index = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number].id;
+        }
+        else {
+            camera_index = js_andruavMessages.CONST_CAMERA_SOURCE_MOBILE;
+        }
+
+
+        js_session.fn_getAndruavFacade().API_CONST_RemoteCommand_takeImage2(this.props.prop_session.m_unit.getPartyID(),
+            camera_index,
+            1,
+            0,
+            0,
+            this.props.prop_parent.fn_getGCSSmall());
+    }
+
+    fn_shot()
+    {
+        if (this.props.prop_session == null) return ;
+        let camera_index;
+        if (this.props.prop_session.m_unit.fn_getIsDE() === true) {
+            camera_index = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number].id;
+        }
+        else {
+            camera_index = js_andruavMessages.CONST_CAMERA_SOURCE_MOBILE;
+        }
+
+        js_session.fn_getAndruavFacade().API_CONST_RemoteCommand_takeImage2(this.props.prop_session.m_unit.getPartyID(),
+            this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number].id,
+            this.props.prop_parent.fn_getNumOfShots(),
+            this.props.prop_parent.fn_getInterval(),
+            0,
+            this.props.prop_parent.fn_getGCSSmall());
+    }
+
+    
+
+    componentDidMount () 
+    {
+        
+    }
+
+    render ()  {
+        const v_unit = this.props.prop_session.m_unit;
+        const v_track = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number];
+
+        if ((v_unit == null) || (v_track == null))
+        {
+
+            return (
+                <div></div>
+            );
+        }
+        else
+        {
+
+            const v_cam_class = 'btn-warning';
+            const v_record_class = 'btn-primary';
+
+            // Compact (mobile): full-width layout with label on top, buttons below stacked
+            // Desktop: flex row - label grows (can wrap), buttons keep fixed width on one line
+            const isCompact = this.props.p_compact === true;
+            const labelColClass = isCompact ? 'col-12 mb-2' : 'flex-grow-1';
+            const oneShotColClass = isCompact ? 'col-6' : 'flex-shrink-0';
+            const multiShotColClass = isCompact ? 'col-6' : 'flex-shrink-0';
+
+            return (
+                    <div key={'cam_dev' + this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number].id} className={isCompact ? "row al_l css_margin_zero" : "d-flex al_l css_margin_zero"}>
+                            <div className={labelColClass + " si-09x css_margin_zero txt-theme-aware"}>
+                            <label>{v_track.ln}</label>
+                            </div>
+                            <div className={oneShotColClass + " si-09x css_margin_zero css_padding_2"}>
+                                <button type="button" className={"btn btn-sm w-100 text-nowrap " + v_cam_class}  onClick={ (e) => this.fn_oneShot()}>One Shot</button>
+                            </div>
+                            <div className={multiShotColClass + " si-09x css_margin_zero css_padding_2"}>
+                                <button type="button" className={"btn btn-sm w-100 text-nowrap " + v_record_class} onClick={ (e) => this.fn_shot()}>Multi Shot</button>
+                            </div>
+                    </div>
+
+            );
+        }
+    };
+};
+
+export default class ClssCameraDialog extends ClssDialogBase
+{
+    constructor()
+    {
+        super();
+        this.state = {
+			...this.state,
+			'm_update': 0,
+			// GCS still image resolution toggle: true = low-res downlink (saved file stays full-res),
+			// false = full-res downlink. Default small to protect RPi/downlink bandwidth.
+			'm_gcsSmall': true,
+		};
+
+        this.m_flag_mounted = false;
+        
+        this.key = Math.random().toString();
+        
+        this.modal_ctrl_cam = React.createRef();
+        this.txt_TotalImages = React.createRef();
+        this.txt_ShootingInterval = React.createRef();
+    }
+
+
+    componentDidMount () {
+        this.modalRef = this.modal_ctrl_cam;
+        super.componentDidMount();
+        this.m_flag_mounted = true;
+        if (this.props.dialogProps) this.fn_displayDialog(this, this.props.dialogProps?.session);
+
+        // Compact mode: the mobile sheet is not rendered until a session exists,
+        // so the input refs are null at mount time. defaultValue on the inputs
+        // handles the initial value in that case.
+        if (this.txt_ShootingInterval.current) {
+            this.txt_ShootingInterval.current.value = 1;
+        }
+        if (this.txt_TotalImages.current) {
+            this.txt_TotalImages.current.value = 1;
+        }
+    }
+
+
+    componentWillUnmount ()
+    {
+    }
+
+    
+    fn_displayDialog (p_me, p_session)
+    {
+        const p_andruavUnit = js_session.fn_getAndruavUnitList().fn_getUnit(p_session.m_unit.getPartyID());
+		if (p_andruavUnit == null) {
+		    return;
+		}
+        
+        if (p_me.m_flag_mounted === false)return ;
+        
+        p_me.state.p_session = p_session;
+		
+        p_me.setState({'m_update': p_me.state.m_update +1});
+
+        // Compact mode: mobile sheet visibility is handled by render (returns
+        // null when there is no session), so the ref may be null.
+        if (p_me.modal_ctrl_cam.current) {
+            p_me.modal_ctrl_cam.current.style.display = 'block';
+        }
+    }
+
+    fn_getCurrentPartyID() {
+        if (this.state.p_session && this.state.p_session.m_unit) {
+            return this.state.p_session.m_unit.getPartyID();
+        }
+        return null;
+    }
+
+   fn_getInterval()
+    {
+        // txt_ShootingInterval is rendered below with ref={this.txt_ShootingInterval}
+        return this.txt_ShootingInterval.current ? this.txt_ShootingInterval.current.value : undefined;
+    }
+
+    fn_getNumOfShots()
+    {
+        // txt_TotalImages is rendered below with ref={this.txt_TotalImages}
+        return this.txt_TotalImages.current ? this.txt_TotalImages.current.value : undefined;
+    }
+
+    fn_getGCSSmall()
+    {
+        return this.state.m_gcsSmall === true;
+    }
+
+    fn_toggleGcsSmall()
+    {
+        this.setState((s) => ({ 'm_gcsSmall': !(s.m_gcsSmall === true) }));
+    }
+
+    fn_initDialog() {
+        // Compact mode: the mobile sheet is not rendered at mount, so the input
+        // and card refs may be null here.
+        if (this.txt_TotalImages.current) {
+            this.txt_TotalImages.current.onmousedown = function () {
+                // `this` is the input DOM node; stop its <tr> from being
+                // draggable while the user interacts with the field.
+                const v_tr = this.closest('tr');
+                if (v_tr) v_tr.classList.remove('draggable');
+            };
+        }
+        if (this.txt_ShootingInterval.current) {
+            this.txt_ShootingInterval.current.onmousedown = function () {
+                const v_tr = this.closest('tr');
+                if (v_tr) v_tr.classList.remove('draggable');
+            };
+        }
+
+        if (this.modal_ctrl_cam.current) {
+            this.modal_ctrl_cam.current.style.display = 'none';
+        }
+
+        super.fn_initDialog();
+    }
+
+    fn_closeDialog()
+    {
+        if (this.modal_ctrl_cam.current) {
+            this.modal_ctrl_cam.current.style.opacity = '';
+            this.modal_ctrl_cam.current.style.display = 'none';
+        }
+        if ((this.state !== null && this.state !== undefined) && (this.state.hasOwnProperty('p_session') === true))
+        {
+            this.state.p_session = null;
+        }
+        fn_closeDialogService();
+    }
+
+
+    render ()
+    {
+        let p_session;
+        let v_streanms = [];
+        let v_unitName = 'undefined';
+
+        if ((this.state.hasOwnProperty('p_session')) && (this.state.p_session !== null && this.state.p_session !== undefined))
+        {
+            p_session = this.state.p_session;
+            
+            js_common.fn_console_log ("Debug:", p_session.m_unit.m_Video.m_videoTracks.length);
+
+            for (let i = 0; i < p_session.m_unit.m_Video.m_videoTracks.length; ++i) {
+                v_streanms.push(<ClssCameraDevice key={p_session.m_unit.m_Video.m_videoTracks[i].id+'cd'} prop_session={p_session} prop_track_number={i} prop_parent={this} />);
+            }
+            v_unitName = p_session.m_unit.m_unitName
+        }
+
+        const isCompact = this.fn_isCompact();
+        const partyId = this.fn_getCurrentPartyID();
+
+        // Compact mode: render as mobile bottom sheet instead of draggable card
+        if (isCompact) {
+            // Only show mobile sheet when there's an active session
+            if (!this.state.p_session) {
+                return null;
+            }
+
+            const isNoCameras = v_streanms.length === 0;
+
+            return (
+                <div className="mobile-sheet-backdrop" onClick={() => this.fn_closeDialog()}>
+                    <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+                        <div className="mobile-sheet-handle" />
+                        <div className="mobile-sheet-header">
+                            <span className="mobile-sheet-title">
+                                <i className="bi bi-camera" /> {'Still Image of ' + v_unitName}
+                            </span>
+                            <button className="mobile-sheet-close" onClick={() => this.fn_closeDialog()}>
+                                <i className="bi bi-x-lg" />
+                            </button>
+                        </div>
+                        {!isNoCameras && (
+                            <>
+                                {p_session.m_unit.m_Video.m_videoTracks.map((_, i) => (
+                                    <ClssCameraDevice key={p_session.m_unit.m_Video.m_videoTracks[i].id + 'cd'} prop_session={p_session} prop_track_number={i} prop_parent={this} p_compact={isCompact} />
+                                ))}
+                                <div className="row margin_5px">
+                                    <div className="col-12 mb-2 d-flex align-items-center">
+                                        <button type="button" id="small_gcs"
+                                            title={this.state.m_gcsSmall ? 'GCS Image: Small' : 'GCS Image: Full'}
+                                            className={'btn btn-sm ' + (this.state.m_gcsSmall ? 'btn-outline-danger' : 'btn-danger')}
+                                            onClick={() => this.fn_toggleGcsSmall()}>
+                                            <i className={this.state.m_gcsSmall ? 'bi bi-image' : 'bi bi-image-fill'} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="row margin_5px">
+                                    <div className="col-6">
+                                        <div className="form-group">
+                                            <div>
+                                                <label htmlFor="txt_ShootingInterval" className="text-primary"><small>Each&nbsp;N&nbsp;sec</small></label>
+                                                <input id="txt_ShootingInterval" type="number" className="form-control input-xs input-sm" ref={this.txt_ShootingInterval} defaultValue={1} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="col-6">
+                                        <div className="form-group">
+                                            <div>
+                                                <label htmlFor="txt_TotalImages" className="text-primary"><small>Total&nbsp;Img</small></label>
+                                                <input id="txt_TotalImages" type="number" className="form-control input-xs input-sm" ref={this.txt_TotalImages} defaultValue={1} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Desktop mode: render as draggable card
+        const camCardClassName = 'card css_ontop border-light p-2';
+
+        return (
+            <Draggable nodeRef={this.modal_ctrl_cam} handle=".js-draggable-handle" cancel="button, input, textarea, select, option, a">
+            <div key={this.key + 'modal_ctrl_cam'} id="modal_ctrl_cam" title="Camera Control" data-bs-toggle="tooltip"  className={camCardClassName} ref={this.modal_ctrl_cam}>
+                {this.fn_renderDialogHeader('Still Image of ' + v_unitName)}
+
+                {!this.state.isMinimized && (
+                <div key='camera_body'  id="camera-card-body" className="card-body">
+                    <div key='camera_v_streanms'  className='row'>
+                                {v_streanms}
+                    </div>
+                    <div className="tab-content">
+                        <div className="row margin_5px">
+                            <div className="col-4">
+                                <div className="form-group">
+                                    <div>
+                                        <label className="text-warning"><small>GCS&nbsp;Img</small></label>
+                                        <button type="button" id="small_gcs"
+                                            title={this.state.m_gcsSmall ? 'GCS Image: Small' : 'GCS Image: Full'}
+                                            className={'btn btn-sm d-block w-100 ' + (this.state.m_gcsSmall ? 'btn-outline-danger' : 'btn-danger')}
+                                            style={{ height: 'calc(1.5em + 0.5rem + 2px)' }}
+                                            onClick={() => this.fn_toggleGcsSmall()}>
+                                            <i className={this.state.m_gcsSmall ? 'bi bi-image' : 'bi bi-image-fill'} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="col-4">
+                                    <div className="form-group">
+                                    <div>
+                                        <label htmlFor="txt_ShootingInterval" className="text-warning"><small>Every&nbsp;N&nbsp;seconds</small></label>
+                                        <input id="txt_ShootingInterval" type="number"  className="form-control input-xs input-sm"  ref={this.txt_ShootingInterval} defaultValue={1} />
+                                    </div>
+                                    </div>
+                            </div>
+                            <div className="col-4">
+                                    <div className="form-group">
+                                    <div>
+                                        <label htmlFor="txt_TotalImages" className="text-warning"  ><small>Total&nbsp;No.&nbsp;of&nbsp;Images</small></label>
+                                        <input id="txt_TotalImages" type="number"  className="form-control input-xs input-sm" ref={this.txt_TotalImages} defaultValue={1} />
+                                        </div>
+                                    </div>
+                            </div>
+                        </div>
+                    </div>
+                    {/* Still image gallery — desktop only */}
+                    {partyId && (
+                        <>
+                            <hr className="my-2" />
+                            <ClssStillImageGallery partyId={partyId} isCompact={false} />
+                        </>
+                    )}
+                </div>
+                )}
+                {this.fn_renderDialogFooter()}
+            </div>
+            </Draggable>
+            );
+    }
+
+}
+
+
+
+       

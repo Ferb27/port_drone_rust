@@ -1,0 +1,152 @@
+import React    from 'react';
+import { CONST_MAX_MESSAGE_LOG } from '../../js/config/constants.js';
+
+import {EVENTS as js_event} from '../../js/events/js_eventList.js'
+import {EventBridge} from '../../js/hooks/EventBridge.jsx'
+
+class ClssAndruavMessageItem extends React.Component {
+
+    constructor(props) {
+        super(props);
+    }
+    
+    render () 
+    {
+        let v_text_color = " txt-theme-aware ";
+        switch (this.props.p_msg.m_msg.m_error.notification_Type)
+        {
+            case 0:
+            case 1:
+            case 2:
+            case 3:
+                v_text_color = " text-danger ";
+                break;
+            case 4:
+                v_text_color = " text-warning ";
+                break;
+            case 5:
+            case 6:
+            case 7:
+                v_text_color = " text-success ";
+                break;
+            default:
+                break;
+        }
+
+        const m_time = this.props.p_msg.time;
+        const m_notification_Type = this.props.p_msg.m_msg.m_notification_Type;
+        const m_description = this.props.p_msg.m_msg.m_error.Description;
+        const m_index = this.props.p_index;
+        return (
+        <tr key={m_index} className = {'si-09x ' + v_text_color + this.props.className}>
+            <td  scope="row" className={v_text_color}>{m_time}</td>
+            <td scope="row" className={v_text_color}>{m_notification_Type}</td>
+            <td scope="row" className={v_text_color}>{m_description}</td>
+        </tr>
+        );
+    }
+}
+
+export  class ClssCtrlUnitLog  extends React.Component {
+
+    constructor(props)
+    {
+        super(props);
+        this.state={
+            m_message: [],
+		    'm_update': 0
+        };
+        
+        this.m_flag_mounted = false;
+
+        // Event subscriptions are owned by EventBridge siblings rendered
+        // below (see render()), which auto-unsubscribe on unmount via
+        // useEventSubscription.
+    }
+
+    shouldComponentUpdate(nextProps, nextState) {
+        const update = (this.state.m_update != nextState.m_update);
+
+        return update;
+    }
+
+    fn_onMessage (p_msg)
+    {
+        /*
+            c_msg.m_unit = p_andruavUnit;
+			c_msg.m_notification_Type = v_notification_Type;
+			c_msg.m_cssclass = v_cssclass;
+			c_msg.m_error = p_error
+		*/
+
+        if (this.props.p_unit.getPartyID() !== p_msg.m_unit.getPartyID()) return ;
+
+        this.state.m_message.push ({
+            m_msg: p_msg,
+            time: (new Date()).toLocaleTimeString()
+        });
+
+        // Trim the backing array so it never grows beyond the display window.
+        // Render only ever shows the last CONST_MAX_MESSAGE_LOG entries; without
+        // this the array (and every message/unit reference inside it) grows
+        // unbounded over a long session.
+        const v_cap = CONST_MAX_MESSAGE_LOG;
+        if (this.state.m_message.length > v_cap) {
+            this.state.m_message.splice(0, this.state.m_message.length - v_cap);
+        }
+
+
+        if (this.m_flag_mounted === false)return ;
+        this.setState({'m_update': this.state.m_update +1});
+    }
+
+    componentDidMount() {
+        this.m_flag_mounted = true;
+    }
+
+    fn_clear (e)
+    {
+        if (this.m_flag_mounted === false)return ;
+        this.setState({'m_message':[], 'm_update': this.state.m_update +1});
+    }
+
+    componentWillUnmount () {
+        this.m_flag_mounted = false;
+        // Unsubscription is handled automatically by the EventBridge
+        // siblings (useEventSubscription) on unmount.
+    }
+
+    render () {
+        let v_messages=[];
+
+        //TODO: make paging here
+        let len = this.state.m_message.length>0?this.state.m_message.length:0;
+        let min = Math.max(len - CONST_MAX_MESSAGE_LOG,0);
+        for (let i=len-1; i>=min; --i) 
+        {
+            v_messages.push(<ClssAndruavMessageItem key={this.props.p_unit.getPartyID() + "_log" + i} p_index={i} p_msg={this.state.m_message[i]}/>)
+        }
+        
+        return (
+            <div key={this.props.p_unit.getPartyID() + "_msgctrl"} className="">
+                 <EventBridge eventName={js_event.EE_onMessage} onEvent={(p_msg) => this.fn_onMessage(p_msg)} />
+                 <div key='params' id="parameters_sublist" className='d-flex justify-content-end'>
+                            <button type="button" className='btn btn-success btn-sm ctrlbtn me-5'  title='Clear Messages' onClick={(e) => this.fn_clear(e)}>Clear</button>
+                 </div>
+                 <table className = "table table-dark css_table_log si-09x ">
+                    <thead>
+                        <tr>
+                        <th data-sort-type="text" className="w-25" scope="col">Time</th>
+                        <th className="w-25" scope="col">Type</th>
+                        <th data-sort-type="text" className="w-75" scope="col">Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {v_messages}
+                    </tbody>
+                </table>
+            </div>
+        ) 
+    }
+}
+

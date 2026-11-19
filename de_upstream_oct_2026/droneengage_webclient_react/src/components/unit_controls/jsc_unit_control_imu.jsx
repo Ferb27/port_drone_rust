@@ -1,0 +1,332 @@
+import React from 'react';
+import * as js_session from '../../js/state/session.js';
+import * as js_preferences from '../../js/state/preferences.js';
+import { CONST_DFM_FAR, CONST_DFM_SAFE } from '../../js/config/constants.js';
+import { withTranslation } from 'react-i18next';
+import * as js_helpers from '../../js/helpers/js_helpers.js';
+import { mavlink20 } from '../../js/js_mavlink_v2.js';
+import { hlp_getFlightMode, fn_switchGPS, fn_openFenceManager, fn_isBadFencing } from '../../js/app/js_main.js';
+import * as js_andruavUnit from '../../js/model/js_andruavUnit.js';
+import * as js_andruavMessages from '../../js/protocol/messages/js_andruavMessages';
+import ClssCtrlUDPPoxyTelemetry from '../gadgets/jsc_ctrl_udp_proxy_telemetry.jsx';
+import { ClssCtrlHUD } from '../gadgets/jsc_ctrl_hudControl.jsx';
+import { ClssCtrlDirections } from '../gadgets/jsc_ctrl_directions_control.jsx';
+import ClssCtrlSWARM from '../gadgets/jsc_ctrl_swarm.jsx';
+import { ClssCtrlDrone_Speed_Ctrl } from '../gadgets/jsc_ctrl_speed_control.jsx';
+import { ClssCtrlDrone_Altitude_Ctrl } from '../gadgets/jsc_ctrl_altitude_control.jsx';
+import ClssCtrlDrone_FlightMode_Ctrl from '../gadgets/jsc_ctrl_flight_mode_control.jsx';
+import ClssCtrlDistanceToMeControl from '../gadgets/jsc_ctrl_distance_to_me_control.jsx';
+
+/**
+ * This is the MAIN tab control
+ */
+class ClssCtrlDroneIMU extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            m_update: 0,
+        };
+        this.m_flag_mounted = false;
+        this.telemetry_level = ["OFF", "1", "2", "3"];
+    }
+
+    componentWillUnmount() { }
+
+    componentDidMount() {
+        this.m_flag_mounted = true;
+    }
+
+    fn_connectToFCB(p_andruavUnit) {
+        if (p_andruavUnit === null || p_andruavUnit === undefined) return;
+        js_session.fn_getAndruavFacade().API_connectToFCB(p_andruavUnit);
+    }
+
+    hlp_getGPS(p_andruavUnit) {
+        const { t } = this.props;
+        let res = {
+            m_gps_class: "",
+            m_gps_class2: "",
+            m_gps_text: "",
+            m_gps_text2: "",
+            m_gps_status: "",
+            m_gps_source: "",
+        };
+
+        res.m_gps_class = "bg-danger text-white text-center bi bi-globe";
+        res.m_gps_class2 = "text-white text-center";
+        if (p_andruavUnit.m_GPS_Info1.m_isValid === true) {
+            switch (p_andruavUnit.m_GPS_Info1.GPS3DFix) {
+                case 1:
+                    res.m_gps_text = t('unit_control_imu:gps.noFix');
+                    res.m_gps_class = "bg-danger text-white bi bi-globe";
+                    break;
+                case 2:
+                    res.m_gps_class = "bg-warning text-white bi bi-globe";
+                    break;
+                case 3:
+                    res.m_gps_class = "bg-info text-white";
+                    res.m_gps_text = t('unit_control_imu:gps.3dFix');
+                    break;
+                case 4:
+                    res.m_gps_class = "bg-primary text-white";
+                    res.m_gps_text = t('unit_control_imu:gps.dgps');
+                    break;
+                case 5:
+                    res.m_gps_class = "bg-primary text-white";
+                    res.m_gps_text = t('unit_control_imu:gps.rtkFloat');
+                    break;
+                case 6:
+                    res.m_gps_class = "bg-primary text-white";
+                    res.m_gps_text = t('unit_control_imu:gps.rtkFixed');
+                    break;
+                case 7:
+                    res.m_gps_class = "bg-primary text-white";
+                    res.m_gps_text = t('unit_control_imu:gps.static');
+                    break;
+                case 8:
+                    res.m_gps_class = "bg-primary text-white";
+                    res.m_gps_text = t('unit_control_imu:gps.ppp');
+                    break;
+            }
+
+            switch (p_andruavUnit.m_GPS_Info1.gpsMode) {
+                case 0:
+                    res.m_gps_status = t('unit_control_imu:gps.auto');
+                    res.m_gps_source = "bi bi-globe";
+                    break;
+                case 1:
+                    res.m_gps_status = t('unit_control_imu:gps.mobile');
+                    res.m_gps_source = "bi bi-globe";
+                    break;
+                case 2:
+                    res.m_gps_status = t('unit_control_imu:gps.fcb');
+                    res.m_gps_source = "bi bi-globe";
+                    break;
+                default:
+                    break;
+            }
+
+            res.m_gps_text2 = t('unit_control_imu:gps.satCount', { count: p_andruavUnit.m_GPS_Info1.m_satCount });
+        } else {
+            res.m_gps_text = t('unit_control_imu:gps.noGps');
+            res.m_gps_status = t('unit_control_imu:gps.status');
+            res.m_gps_source = "text-secondary text-center bi bi-globe";
+        }
+
+        return res;
+    }
+
+    renderIMU(v_andruavUnit) {
+        const { t } = this.props;
+        let v_fence_text = t('unit_control_imu:fence.unknown');
+        let v_fence_class = "text-muted";
+        let v_yaw_text;
+        let v_yaw_knob = [];
+        let v_fcb_mode_title;
+        let v_bearing_text;
+        let v_bearing_knob = [];
+        let v_bearingTarget_knob = [];
+        let v_flight_status_text;
+        let v_flight_status_class;
+        let distanceToWP_class;
+        let wpdst_text;
+        let v_flyingTime = " ";
+        let v_totalFlyingTime = " ";
+
+        if (v_andruavUnit.m_isFlying === true) {
+            if (v_andruavUnit.m_FlyingLastStartTime !== null && v_andruavUnit.m_FlyingLastStartTime !== undefined) {
+                v_flyingTime = js_helpers.fn_getTimeDiffDetails_Shortest(v_andruavUnit.m_FlyingLastStartTime);
+            }
+            if (v_andruavUnit.m_VehicleType === js_andruavUnit.VEHICLE_SUBMARINE) {
+                v_flight_status_text = t('unit_control_imu:flight.diving');
+            } else {
+                v_flight_status_text = t('unit_control_imu:flight.flying');
+            }
+            v_flight_status_class = "bg-danger text-white cursor_hand";
+        } else {
+            v_flight_status_text = t('unit_control_imu:flight.onGround');
+            v_flight_status_class = "bg-success text-white";
+        }
+
+        const c_delta = v_andruavUnit.m_FlyingLastStartTime === 0 ? 0.0 : v_andruavUnit.m_FlyingLastStartTime;
+        v_totalFlyingTime = js_helpers.fn_getTimeDiffDetails_Shortest(c_delta + v_andruavUnit.m_FlyingTotalDuration);
+
+
+        if (v_andruavUnit.m_Nav_Info.p_Orientation.yaw == null) {
+            v_yaw_text = t('unit_control_imu:hud.unknown');
+            v_yaw_knob = '';
+        } else {
+            v_yaw_text = t('unit_control_imu:hud.label');
+            v_yaw_knob.push(
+                <ClssCtrlHUD
+                    key={v_andruavUnit.getPartyID() + "_hud"}
+                    id={v_andruavUnit.getPartyID() + "_hud"}
+                    p_unit={v_andruavUnit}
+                    title={t('unit_control_imu:hud.title')}
+                />
+            );
+        }
+
+        if (v_andruavUnit.m_Nav_Info.p_Location.bearing == null) {
+            v_bearing_text = t('unit_control_imu:bearing.label');
+            v_bearing_knob = '';
+            v_bearingTarget_knob = '';
+        } else {
+            v_bearing_text = t('unit_control_imu:bearing.label');
+            v_bearing_knob.push(
+                <ClssCtrlDirections
+                    key={v_andruavUnit.getPartyID() + "_tb"}
+                    id={v_andruavUnit.getPartyID() + "_tb"}
+                    p_unit={v_andruavUnit}
+                />
+            );
+        }
+
+        const target = v_andruavUnit.m_Nav_Info._Target;
+
+        if (target.wp_dist === null || target.wp_dist === undefined || target.wp_dist < 0) {
+            wpdst_text = t('unit_control_imu:waypoint.na');
+            distanceToWP_class = 'bg-secondary text-white cursor_hand bi bi-geo-alt-fill';
+        } else {
+            if (js_preferences.fn_getUseMetricSystem() === true) {
+                wpdst_text = Number(target.wp_dist.toFixed(1)).toLocaleString() + t('unit_control_imu:waypoint.m');
+            } else {
+                wpdst_text = Number(target.wp_dist * js_helpers.CONST_METER_TO_FEET).toFixed(1).toLocaleString() + t('unit_control_imu:waypoint.ft');
+            }
+
+            wpdst_text += t('unit_control_imu:waypoint.to', { num: target.wp_num, count: target.wp_count });
+
+            switch (target.mission_state) {
+                case mavlink20.MISSION_STATE_UNKNOWN:
+                case mavlink20.MISSION_STATE_NO_MISSION:
+                    distanceToWP_class = 'bg-light text-dark cursor_hand bi bi-geo-alt-fill';
+                    break;
+                case mavlink20.MISSION_STATE_NOT_STARTED:
+                case mavlink20.MISSION_STATE_PAUSED:
+                    distanceToWP_class = 'bg-secondary text-white cursor_hand bi bi-geo-alt-fill';
+                    break;
+                default:
+                    if (target.wp_dist > CONST_DFM_FAR) {
+                        distanceToWP_class = 'bg-danger text-white cursor_hand bi bi-geo-alt-fill';
+                    } else if (target.wp_dist > CONST_DFM_SAFE) {
+                        distanceToWP_class = 'bg-warning text-dark cursor_hand bi bi-geo-alt-fill';
+                    } else {
+                        distanceToWP_class = 'bg-info text-white cursor_hand bi bi-geo-alt-fill';
+                    }
+                    break;
+            }
+        }
+
+        const res = fn_isBadFencing(v_andruavUnit);
+        v_andruavUnit.m_fencestatus = res;
+
+        if (v_andruavUnit.m_fencestatus !== null && v_andruavUnit.m_fencestatus !== undefined) {
+            if ((v_andruavUnit.m_fencestatus & 0b010) === 0b010) {
+                v_fence_text = t('unit_control_imu:fence.bad');
+                v_fence_class = 'bg-danger text-white bi bi-bounding-box-circles';
+            } else if ((v_andruavUnit.m_fencestatus & 0b110) === 0b100) {
+                v_fence_text = t('unit_control_imu:fence.good');
+                v_fence_class = 'bg-success text-white bi bi-bounding-box-circles';
+            } else if ((v_andruavUnit.m_fencestatus & 0b111) === 0b001) {
+                v_fence_text = t('unit_control_imu:fence.bad');
+                v_fence_class = 'bg-danger text-white bi bi-bounding-box-circles';
+            } else {
+                v_fence_text = t('unit_control_imu:fence.noViolation');
+                v_fence_class = 'bg-warning text-white bi bi-bounding-box-circles';
+            }
+        }
+
+        const gps = this.hlp_getGPS(v_andruavUnit);
+
+        let imu = [];
+        imu.push(
+            <div
+                key={'imu_1' + v_andruavUnit.getPartyID()}
+                id="imu_1"
+                className="row al_l css_margin_zero"
+                dir='ltr' //{this.props.i18n.language === 'ar' ? 'rtl' : 'ltr'}
+            >
+                <div key={'gs_ctrl' + v_andruavUnit.getPartyID()} className="css_imu_rail al_l css_margin_zero pb-1">
+                    <ClssCtrlDrone_Speed_Ctrl key={'alt_ctrl1' + v_andruavUnit.getPartyID()} p_unit={v_andruavUnit} p_tile={true} />
+                    <div
+                        key="gps"
+                        id="gps"
+                        className={'css_imu_railseg cursor_hand user-select-none' + js_helpers.fn_tileAccent(gps.m_gps_class)}
+                        title={gps.m_gps_status}
+                        onClick={(e) => fn_switchGPS(v_andruavUnit)}
+                    >
+                        <span className="t_label"><i className={gps.m_gps_source}></i> GPS</span>
+                        <span className="t_value">{' ' + gps.m_gps_text + ' ' + gps.m_gps_text2}</span>
+                        <span className="t_sub">{gps.m_gps_status}</span>
+                    </div>
+                    <ClssCtrlDistanceToMeControl key="DFM" p_unit={v_andruavUnit} p_tile={true} />
+                    <div
+                        key="fence"
+                        id="fence"
+                        className={'css_imu_railseg cursor_hand user-select-none' + js_helpers.fn_tileAccent(v_fence_class)}
+                        title={t('unit_control_imu:fence.title')}
+                        onClick={(e) => fn_openFenceManager(v_andruavUnit.getPartyID())}
+                    >
+                        <span className="t_label"><i className="bi bi-bounding-box-circles"></i></span>
+                        <span className="t_value">{v_fence_text}</span>
+                    </div>
+                </div>
+
+                <div key={'alt_ctrl' + v_andruavUnit.getPartyID()} className="css_imu_rail al_l css_margin_zero pb-1">
+                    <ClssCtrlDrone_Altitude_Ctrl key="alt_ctrl1" p_unit={v_andruavUnit} p_tile={true} />
+                    <div
+                        key={'alt_ctrl2' + v_andruavUnit.getPartyID()}
+                        id="fstatus"
+                        className={'css_imu_railseg user-select-none' + js_helpers.fn_tileAccent(v_flight_status_class)}
+                        title={t('unit_control_imu:flight.totalFlying', { time: v_totalFlyingTime })}
+                    >
+                        <span className="t_value">{v_flight_status_text}</span>
+                        <span className="t_sub">{v_flyingTime}</span>
+                    </div>
+                    <div
+                        key={'wpd_ctrl3' + v_andruavUnit.getPartyID()}
+                        id="wpd"
+                        className={'css_imu_railseg cursor_hand user-select-none' + js_helpers.fn_tileAccent(distanceToWP_class)}
+                        title={t('unit_control_imu:waypoint.title')}
+                    >
+                        <span className="t_label"><i className="bi bi-geo-alt-fill"></i></span>
+                        <span className="t_value">{' ' + wpdst_text}</span>
+                    </div>
+                    <ClssCtrlDrone_FlightMode_Ctrl key={'fcb_mode_ctrl4' + v_andruavUnit.getPartyID()} p_unit={v_andruavUnit} p_tile={true} />
+                </div>
+
+                <div key={'yaw_ctrl' + v_andruavUnit.getPartyID()} className="row al_l bg-gradient css_margin_zero user-select-none">
+                    <div key="yaw_ctrl1" className="col-6 col-sm-4 padding_zero css_border_right_faint css_padding_horizontal_5">
+                        <p id="yaw" className="rounded-3 text-white css_margin_zero">
+                            <small>{v_yaw_text}</small>
+                        </p>
+                        <div id="imu_v_yaw_knob">{v_yaw_knob}</div>
+                    </div>
+                    <div key="yaw_ctrl2" className="col-6 col-sm-3 padding_zero css_border_right_faint css_padding_horizontal_5">
+                        <p id="bearing" className="rounded-3 text-white css_margin_zero">
+                            <small>{v_bearing_text}</small>
+                        </p>
+                        <div id="bearing_main" className="css_margin_zero">
+                            <div id="bearingknob">{v_bearing_knob}</div>
+                            <div id="bearingtargetknob">{v_bearingTarget_knob}</div>
+                        </div>
+                    </div>
+                    <div key={'telem' + v_andruavUnit.getPartyID()} className="col-6 col-sm-3 padding_zero css_user_select_text css_border_right_faint css_padding_horizontal_5">
+                        <ClssCtrlUDPPoxyTelemetry key={'ctele' + v_andruavUnit.getPartyID()} p_unit={v_andruavUnit} />
+                    </div>
+                    <div key={'swarm' + v_andruavUnit.getPartyID()} className="col-6 col-sm-2 padding_zero css_padding_horizontal_5">
+                        <ClssCtrlSWARM key={'cswarm' + v_andruavUnit.getPartyID()} className="row padding_zero" p_unit={v_andruavUnit} />
+                    </div>
+                </div>
+            </div>
+        );
+
+        return imu;
+    }
+
+    render() {
+        return this.renderIMU(this.props.p_unit);
+    }
+}
+
+export default withTranslation('unit_control_imu')(ClssCtrlDroneIMU);

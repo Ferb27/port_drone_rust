@@ -1,0 +1,56 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs & compiled binaries
+dist/
+build/
+build_*/
+*.tsbuildinfo
+de_fork/de_communication/bin/de_comm
+de_fork/de_mavlink/bin/de_ardupilot
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment, secrets, keys & local certs
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.local
+
+# Captures, traces & logs
+traces/
+*.pcap
+*.BIN
+*.log
+!logs/**/*.md
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Vite cache
+.vite/
+
+# Temp / scratch / OS / IDE
+*.tmp
+_tree*.txt
+.tmp_*.txt
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

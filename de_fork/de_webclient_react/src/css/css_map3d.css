@@ -1,0 +1,292 @@
+/* Styles used only by the Mapbox 3D map (src/js/maps/js_map3d.js).
+   Kept separate from css_styles.css so the 3D-map-specific rules are
+   easy to find and edit alongside js_map3d.js. */
+
+.css_map3d_marker {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  cursor: pointer;
+}
+
+.css_map3d_marker_icon {
+  width: 28px;
+  height: 28px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.7));
+  transform-origin: center center;
+}
+
+/* Terrain exaggeration control (x1/x2/x5 buttons on the 3D map) */
+.css_map3d_exaggeration_ctrl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.css_map3d_exaggeration_label {
+  font-size: 10px;
+  font-weight: bold;
+  color: #333;
+  padding: 0 4px;
+  letter-spacing: 1px;
+}
+
+.css_map3d_exaggeration_ctrl button {
+  border: none;
+  background: #fff;
+  color: #333;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.css_map3d_exaggeration_ctrl button:hover {
+  background: #e0e0e0;
+}
+
+.css_map3d_exaggeration_ctrl button.active {
+  background: #2980b9;
+  color: #fff;
+}
+
+/* Model size multiplier control (+/- stepper, top-left of the 3D map) */
+.css_map3d_modelsize_ctrl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.css_map3d_modelsize_label {
+  font-size: 10px;
+  font-weight: bold;
+  color: #333;
+  padding: 0 4px;
+  letter-spacing: 1px;
+}
+
+.css_map3d_modelsize_ctrl button {
+  border: none;
+  background: #fff;
+  color: #333;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.css_map3d_modelsize_ctrl button:hover {
+  background: #e0e0e0;
+}
+
+.css_map3d_modelsize_ctrl button.active {
+  background: #27ae60;
+  color: #fff;
+}
+
+/* +/- step buttons for the model size multiplier. Disabled at the range
+   edges (see ModelSizeControl._updateButtonStates). */
+.css_map3d_modelsize_ctrl button.css_map3d_modelsize_step {
+  min-width: 18px;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 6px;
+}
+
+/* Override Mapbox GL's .mapboxgl-ctrl-group button:focus box-shadow, which
+   otherwise makes a clicked step button look "always pressed" (the minus
+   button is first and retains focus after a click). These buttons have
+   their own visual feedback (hover + disabled state). */
+.css_map3d_modelsize_ctrl button.css_map3d_modelsize_step:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.css_map3d_modelsize_ctrl button.css_map3d_modelsize_step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.css_map3d_modelsize_ctrl button.css_map3d_modelsize_step:disabled:hover {
+  background: #fff;
+}
+
+/* Current multiplier value shown between the +/- buttons. */
+.css_map3d_modelsize_ctrl .css_map3d_modelsize_value {
+  font-size: 11px;
+  font-weight: bold;
+  color: #333;
+  min-width: 34px;
+  text-align: center;
+  padding: 0 2px;
+  user-select: none;
+}
+
+/* ADSB toggle button (replaces the 'ADSB' text label in the model-size
+   control). active = ADSB enabled (highlighted), inactive = dimmed. */
+.css_map3d_modelsize_ctrl button.css_map3d_adsb_toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  opacity: 0.45;
+}
+
+.css_map3d_modelsize_ctrl button.css_map3d_adsb_toggle.active {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  opacity: 1;
+}
+
+/* ADSB provider error state — red background to surface fetch failures
+   (HTTP 500, network error, rate limit, etc.) on the 3D map. */
+.css_map3d_modelsize_ctrl button.css_map3d_adsb_toggle.error {
+  background: #f8d7da;
+  border: 1px solid #dc3545;
+  opacity: 1;
+}
+
+/* Chase-cam (follow) toggle control — single button, bottom-left of the 3D
+   map. active = follow mode on (camera trails the selected unit). */
+.css_map3d_follow_ctrl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.css_map3d_follow_ctrl button.css_map3d_follow_toggle {
+  border: none;
+  background: #fff;
+  color: #333;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.css_map3d_follow_ctrl button.css_map3d_follow_toggle:hover {
+  background: #e0e0e0;
+}
+
+.css_map3d_follow_ctrl button.css_map3d_follow_toggle.active {
+  background: #8e44ad;
+  color: #fff;
+}
+
+/* Icons-only toggle control — single button, bottom-left of the 3D map,
+   stacked above the follow button. active = icons-only mode ON (flat DOM
+   icons everywhere, GLB models hidden). inactive = normal zoom-based LOD. */
+.css_map3d_iconsonly_ctrl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.css_map3d_iconsonly_ctrl button.css_map3d_iconsonly_toggle {
+  border: none;
+  background: #fff;
+  color: #333;
+  font-size: 14px;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.css_map3d_iconsonly_ctrl button.css_map3d_iconsonly_toggle:hover {
+  background: #e0e0e0;
+}
+
+.css_map3d_iconsonly_ctrl button.css_map3d_iconsonly_toggle.active {
+  background: #2c3e50;
+  color: #fff;
+}
+
+/* Draggable handle for the guided-target ground marker (3D map).
+ * Invisible fill — the visible crosshair is the GeoJSON line layer; this
+ * element only exists to capture Mapbox's native drag gesture. Sized as
+ * a comfortable grab target around the crosshair. */
+.css_map3d_target_drag_handle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+}
+
+.css_map3d_target_drag_handle:active {
+  cursor: grabbing;
+}
+
+/* Destination / swarm-target ground marker (3D map).
+ * Small ground-level icon showing where a unit's target is — a swarm
+ * formation slot (small drone icon) or a guided-point destination icon.
+ * Mirrors the leaflet destination marker in EVT_DistinationPointChanged. */
+.css_map3d_destination_marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  cursor: pointer;
+}
+
+.css_map3d_destination_marker_icon {
+  width: 28px;
+  height: 28px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.7));
+  transform-origin: center center;
+}
+
+/* Home helipad DOM icon (3D map).
+ * Small ground-level home icon sitting on top of the terrain-draped
+ * helipad circle + "H" line layer.  Click opens the "Home of <unit>"
+ * info popup, mirroring the leaflet home marker in EVT_HomePointChanged. */
+.css_map3d_home_marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  cursor: pointer;
+}
+
+.css_map3d_home_marker_icon {
+  width: 24px;
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.7));
+  transform-origin: center center;
+}

@@ -1,0 +1,13 @@
+diff --git a/src/routes/js_router_agent.js b/src/routes/js_router_agent.js
+index 2d64fa2..6ba6d16 100755
+--- a/src/routes/js_router_agent.js
++++ b/src/routes/js_router_agent.js
+@@ -6,7 +6,7 @@ const C = global.c_CONSTANTS;
+ // Simple in-memory rate limiter
+ const rateLimitMap = new Map();
+ const RATE_LIMIT_WINDOW = 60000; // 1 minute
+-const RATE_LIMIT_MAX_REQUESTS = 10; // Max 10 requests per minute per IP
++const RATE_LIMIT_MAX_REQUESTS = 1000; // Max 10 requests per minute per IP
+ 
+ const accountRateLimitMap = new Map();
+ const ACCOUNT_RATE_LIMIT_WINDOW = 60000; // 1 minute

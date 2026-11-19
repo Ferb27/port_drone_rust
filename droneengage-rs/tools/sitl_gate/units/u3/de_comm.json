@@ -1,0 +1,30 @@
+{
+ "module_id": "COMM_3",
+ "s2s_udp_listening_ip": "127.0.0.1",
+ "s2s_udp_listening_port": "60030",
+ "s2s_udp_packet_size": "8192",
+ "use_unix_socket": false,
+ "auth_ip": "127.0.0.1",
+ "auth_port": 19408,
+ "auth_verify_ssl": false,
+ "use_local_comm_server": false,
+ "root_certificate_path": "./root.crt",
+ "userName": "single@airgap.droneengage.com",
+ "accessCode": "test",
+ "unitID": "drone3",
+ "groupID": "1",
+ "unitDescription": "sitl 3",
+ "logger_enabled": false,
+ "logger_debug": false,
+ "ping_server_rate_in_ms": 1500,
+ "max_allowed_ping_delay_in_ms": 5000,
+ "max_offline_count": 5,
+ "led_pins_enabled": false,
+ "buzzer_pins_enabled": false,
+ "location": {
+  "lng": 1491659260,
+  "lat": -353538460,
+  "alt_abs": 120000,
+  "alt_rel": 120000
+ }
+}

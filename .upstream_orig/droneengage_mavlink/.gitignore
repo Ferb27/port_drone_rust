@@ -1,0 +1,55 @@
+
+# unix files
+*~
+.vscode/*
+
+# eclipse
+.settings/
+build/
+.cproject
+.project
+
+# build
+*.out
+*.o
+*.d
+*.asm
+*.plan
+mavlink_control
+
+# mac
+.DS_Store
+
+/bin/
+/build/
+/Debug/
+/tests/
+M*.txt
+doxygen_doc/
+
+mav.parm
+mav.tlog
+mav.tlog.raw
+eeprom.bin
+/terrain
+
+*.BIN
+*.sh
+!build.sh
+!build_ddebug.sh
+!build_release.sh
+*.parm
+LASTLOG.TXT
+
+*.log
+*.local
+TODO.txt
+checks.json
+
+*.bak_*
+*.plan
+local/
+
+wiki/mywiki/
+.version
+*.tlog

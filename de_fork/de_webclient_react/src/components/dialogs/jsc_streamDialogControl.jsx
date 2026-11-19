@@ -1,0 +1,309 @@
+import 'jquery-ui-dist/jquery-ui.min.js';
+import * as js_session from '../../js/state/session.js';
+
+import React    from 'react';
+import Draggable from "react-draggable";
+
+import {EVENTS as js_event} from '../../js/events/js_eventList.js'
+import {EventBridge} from '../../js/hooks/EventBridge.jsx'
+import * as js_andruavUnit from '../../js/model/js_andruavUnit.js'
+
+import {fn_VIDEO_login, fn_VIDEO_Record} from '../../js/app/js_main.js';
+import ClssDialogBase from './jsc_dialog_base.jsx';
+import { fn_closeDialog as fn_closeDialogService } from '../../js/app/dialogService.js';
+
+class ClssStreamChannel extends React.Component {
+
+    constructor (props)
+    {
+        super (props);
+        
+        this.state = {
+            m_update: 0
+        };
+
+        this.m_flag_mounted = false;
+
+        // Event subscriptions are owned by EventBridge siblings rendered
+        // below (see render()), which auto-unsubscribe on unmount via
+        // useEventSubscription.
+
+    }
+
+    componentDidMount () {
+        this.m_flag_mounted = true;
+    }
+
+    fn_videoStarted(p_obj)
+    {
+        // p_obj.talk
+        // p_obj.andruavUnit
+        if (this.props.prop_session.m_unit.getPartyID() !== p_obj.andruavUnit.getPartyID()) return ;
+        if (this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number].id !== p_obj.talk.stream.id) return ;
+
+        this.setState({'m_update': this.state.m_update +1});
+
+        console.log ("video started");
+
+    }
+
+    fn_videoStopped(p_obj)
+    {
+        // p_obj.talk
+        // p_obj.andruavUnit
+        if (this.props.prop_session.m_unit.getPartyID() !== p_obj.andruavUnit.getPartyID()) return ;
+        if (this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number].id !== p_obj.talk.stream.id) return ;
+
+        this.setState({'m_update': this.state.m_update +1});
+
+        console.log ("video stopped");
+    }
+
+    fn_unitUpdated(p_obj)
+    {
+        // p_obj.andruavUnit
+        if (this.props.prop_session.m_unit.getPartyID() !== p_obj.getPartyID()) return ;
+
+        this.setState({'m_update': this.state.m_update +1});
+    }
+
+   
+
+    fn_videoStream()
+    {
+        const v_track = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number];
+        fn_VIDEO_login (this.props.prop_session, v_track.id);
+    }
+
+    fn_videoRecord(p_startRecord)
+    {
+        const v_track = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number];
+        fn_VIDEO_Record (this.props.prop_session, v_track.id, p_startRecord);
+    }
+
+    componentWillUnmount () 
+    {
+        // Unsubscription is handled automatically by the EventBridge
+        // siblings (useEventSubscription) on unmount.
+    }
+
+    render ()  {
+        const v_track = this.props.prop_session.m_unit.m_Video.m_videoTracks[this.props.prop_track_number];
+        const v_unit = this.props.prop_session.m_unit;
+        const isCompact = this.props.p_compact === true;
+        if ((v_unit == null) || (v_track == null))
+        {
+
+            return (
+                <div><EventBridge eventName={js_event.EE_videoStreamStarted} onEvent={(p_obj) => this.fn_videoStarted(p_obj)} /><EventBridge eventName={js_event.EE_videoStreamStopped} onEvent={(p_obj) => this.fn_videoStopped(p_obj)} /><EventBridge eventName={js_event.EE_unitUpdated} onEvent={(p_obj) => this.fn_unitUpdated(p_obj)} /></div>
+            );
+        }
+        else
+        {
+
+            let v_stream_class = 'btn-primary';
+            let v_record_class = 'btn-primary';
+            let v_startRecord = true;
+            let actual_fps = 0;
+            const active_track_id  = v_unit.m_Video.m_videoactiveTracks[v_track.id];
+            const track_id  = v_unit.m_Video.m_videoTracks[this.props.prop_track_number];
+            if ((active_track_id !== null && active_track_id !== undefined) && (active_track_id.VideoStreaming !== js_andruavUnit.CONST_VIDEOSTREAMING_OFF))
+            {
+                actual_fps = track_id.a>=0?track_id.a:0;
+                v_stream_class = 'btn-danger';
+            }
+            if ((track_id.r !== null && track_id.r !== undefined)
+                && (track_id.r === true))
+            { // recording
+                v_record_class = 'btn-danger';
+                v_startRecord = false;
+            }
+
+            // Compact (mobile): full-width layout with label on top, buttons below stacked
+            // Desktop: flex row - label flexes (and wraps if long), buttons keep natural width and never wrap
+            const labelColClass = isCompact ? 'col-12 mb-2' : 'flex-grow-1 flex-shrink-1';
+            const streamColClass = isCompact ? 'col-6' : 'flex-shrink-0';
+            const recordColClass = isCompact ? 'col-6' : 'flex-shrink-0';
+
+            return (
+                    <div className={isCompact ? "row al_l css_margin_zero" : "d-flex al_l css_margin_zero"}>
+                            <EventBridge eventName={js_event.EE_videoStreamStarted} onEvent={(p_obj) => this.fn_videoStarted(p_obj)} />
+                            <EventBridge eventName={js_event.EE_videoStreamStopped} onEvent={(p_obj) => this.fn_videoStopped(p_obj)} />
+                            <EventBridge eventName={js_event.EE_unitUpdated} onEvent={(p_obj) => this.fn_unitUpdated(p_obj)} />
+                            <div className={labelColClass + " si-09x css_margin_zero txt-theme-aware"}>
+                            <label>{`${v_track.ln} ${actual_fps>0?` - ${actual_fps} fps`:''}`}</label>
+                            </div>
+                            <div className={streamColClass + " si-09x css_margin_zero css_padding_2"}>
+                                <button type="button" className={"btn btn-sm text-nowrap " + (isCompact ? "w-100 " : "") + v_stream_class}  onClick={ (e) => this.fn_videoStream()}>stream</button>
+                            </div>
+                            <div className={recordColClass + " si-09x css_margin_zero css_padding_2"}>
+                                <button type="button" className={"btn btn-sm text-nowrap " + (isCompact ? "w-100 " : "") + v_record_class} onClick={ (e) => this.fn_videoRecord(v_startRecord)}>record</button>
+                            </div>
+                        </div>
+            );
+        }
+    };
+};
+
+
+export default class ClssStreamDialog extends ClssDialogBase
+{
+    
+    constructor()
+	{
+		super ();
+		this.state = {
+			...this.state,
+			'm_update': 0,
+		};
+    
+        this.m_flag_mounted = false;
+
+        this.key = Math.random().toString();
+        
+        this.modal_ctrl_stream_dlg  = React.createRef();
+
+    }
+
+
+    componentWillUnmount ()
+    {
+    }
+
+    componentDidMount () {
+        this.modalRef = this.modal_ctrl_stream_dlg;
+        super.componentDidMount();
+        this.m_flag_mounted = true;
+        if (this.props.dialogProps) this.fn_displayDialog(this, this.props.dialogProps?.session);
+    }
+
+    fn_displayDialog (p_me, p_session)
+    {
+        if (p_me.m_flag_mounted === false)return ;
+
+        p_me.state.p_session = p_session;
+
+        p_me.setState({'m_update': p_me.state.m_update +1});
+
+        // Compact mode: mobile sheet visibility is handled by state, not DOM manipulation
+        if (p_me.modal_ctrl_stream_dlg.current) {
+            p_me.modal_ctrl_stream_dlg.current.style.display = 'block';
+        }
+    }
+
+    fn_initDialog() {
+        // Compact mode: mobile sheet doesn't use this ref, only desktop card does
+        if (this.modal_ctrl_stream_dlg.current) {
+            this.modal_ctrl_stream_dlg.current.style.display = 'none';
+        }
+        super.fn_initDialog();
+    }
+
+    fn_getCurrentPartyID() {
+        if (this.state.p_session && this.state.p_session.m_unit) {
+            return this.state.p_session.m_unit.getPartyID();
+        }
+        return null;
+    }
+
+    fn_closeDialog()
+    {
+        // Compact mode: mobile sheet doesn't use this ref, only desktop card does
+        if (this.modal_ctrl_stream_dlg.current) {
+            this.modal_ctrl_stream_dlg.current.style.opacity = '';
+            this.modal_ctrl_stream_dlg.current.style.display = 'none';
+        }
+        if ((this.state !== null && this.state !== undefined) && (this.state.hasOwnProperty('p_session') === true))
+        {
+            this.state.p_session = null;
+        }
+        fn_closeDialogService();
+    }
+
+
+    
+
+    render() {
+        let p_andruavUnit = null;
+
+        if (this.state.p_session) {
+            p_andruavUnit = js_session.fn_getAndruavUnitList().fn_getUnit(this.state.p_session.m_unit.getPartyID());
+        }
+
+        const isNoStreams = p_andruavUnit === null;
+        const isCompact = this.fn_isCompact();
+
+        // Compact mode: render as mobile bottom sheet instead of draggable card
+        if (isCompact) {
+            // Only show mobile sheet when there's an active session
+            if (!this.state.p_session) {
+                return null;
+            }
+
+            return (
+                <div className="mobile-sheet-backdrop" onClick={() => this.fn_closeDialog()}>
+                    <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+                        <div className="mobile-sheet-handle" />
+                        <div className="mobile-sheet-header">
+                            <span className="mobile-sheet-title">
+                                <i className="bi bi-camera-video" /> {isNoStreams ? 'No Streams' : 'Streams of ' + this.state.p_session?.m_unit.m_unitName}
+                            </span>
+                            <button className="mobile-sheet-close" onClick={() => this.fn_closeDialog()}>
+                                <i className="bi bi-x-lg" />
+                            </button>
+                        </div>
+                        {!isNoStreams && (
+                            <>
+                                {this.state.p_session.m_unit.m_Video.m_videoTracks.map((_, i) => (
+                                    <ClssStreamChannel key={i} prop_session={this.state.p_session} prop_track_number={i} p_compact={isCompact} />
+                                ))}
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Desktop mode: render as draggable card
+        const cardClassName = 'card css_ontop border-light p-2';
+
+        return (
+            <Draggable nodeRef={this.modal_ctrl_stream_dlg} handle=".js-draggable-handle" cancel="button, input, textarea, select, option, a">
+            <div
+                id="modal_ctrl_stream_dlg"
+                title="Streaming Video"
+                className={cardClassName}
+                ref={this.modal_ctrl_stream_dlg}
+            >
+                {this.fn_renderDialogHeader(isNoStreams ? 'No Streams' : 'Streams of ' + this.state.p_session?.m_unit.m_unitName)}
+
+                {!this.state.isMinimized && (
+                <div className="card-body">
+                    {isNoStreams ? (
+                        <div key='stream-card-body'>
+                            {/* No additional content required */}
+                        </div>
+                    ) : (
+                        <div className='row'>
+                            {this.state.p_session.m_unit.m_Video.m_videoTracks.map((_, i) => (
+                                <ClssStreamChannel key={i} prop_session={this.state.p_session} prop_track_number={i} p_compact={isCompact} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+                )}
+
+                {!isNoStreams && (
+                    <div className="form-group text-center localcontainer">
+                        {this.fn_renderDialogFooter(
+                            <button id="btnHelp" type="button" className="btn btn-sm btn-primary">Help</button>
+                        )}
+                    </div>
+                )}
+            </div>
+            </Draggable>
+        );
+    }
+}
+
+

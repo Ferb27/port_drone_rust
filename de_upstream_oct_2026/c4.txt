@@ -1,0 +1,7 @@
+login: advertised port=9967 (de_public_port), a.authed=true b.authed=true
+check1 6503: PASS
+check1 6546: PASS
+check2 9021 x64: socket còn sống, reply=64, seq trả về=0, thứ tự đúng, mẫu reply={"error":"bad_request"}
+check2: PASS (không có relay thì server trả reject; PASS = không rớt socket + không đảo thứ tự)
+check3 6503 latest_wins: gửi=100 nhận=39 drop=61 q đầu=0 q cuối=96 receiver còn sống
+check3: PASS (latest_wins bỏ frame khi vượt high-water); frame cuối q=99 bị bỏ (guard bỏ frame khi buffer cao, không phải 'chỉ giữ frame mới nhất')

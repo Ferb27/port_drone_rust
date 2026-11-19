@@ -1,0 +1,134 @@
+explain.txt: giải thích "Chỗ lệch so với PROMPT_CLAUDE.md" (report.txt mục 3), 2026-11-18
+Mỗi item ghi theo thứ tự WHAT / WHY / CODE THẬT (dòng copy nguyên văn từ working tree, hoặc từ HEAD = upstream nếu có ghi).
+Chỗ PROMPT_EXPLAIN.md viết sai được đánh dấu [SỬA].
+
+E1. Tên repo
+  WHAT: Thư mục là droneengage_{server,authenticator,...}. Đây là tên thật của 6 repo upstream (github.com/DroneEngage/droneengage_*).
+        Lệnh apply trong PROMPT_CLAUDE.md phải viết droneengage_*.
+  [SỬA] PROMPT_EXPLAIN.md ghi "dronemy_*" / "droneenable_*" và "đổi tên khi copy để tránh lộ tên thật". Không có chuyện đó:
+        không folder nào tên droneenable_*, không có bước đổi tên nào. Clone giữ nguyên tên upstream.
+        Nếu muốn ẩn tên thì đó là một việc mới, chưa ai làm.
+  CODE THẬT (ls de_upstream_oct_2026):
+    droneengage_authenticator  droneengage_common  droneengage_communication
+    droneengage_mavlink  droneengage_server  droneengage_webclient_react
+  Lệnh đúng:
+    git -C droneengage_server        apply ../P4_de_server_rust.patch
+    git -C droneengage_server        apply ../rebrand_de_server.patch
+    git -C droneengage_authenticator apply ../P3_de_authenticator_rust.patch
+    git -C droneengage_authenticator apply ../rebrand_de_authenticator.patch
+
+E2. P3
+  WHAT: Chỉ đổi 1 dòng (+1/-1) ở src/web/mod.rs:97. Hunk thật là @@ -96,3 +96,3 @@ (diff -U1), không phải -97,6 +97,7.
+  [SỬA] "SldingLimiter có sẵn từ upstream ở dòng 98" là SAI. Upstream (HEAD 9274556) viết đúng chính tả "SlidingLimiter";
+        git grep -c SldingLimiter HEAD ra 0. Typo chỉ nằm trong PROMPT_CLAUDE.md. Nếu chép vào code thì compile lỗi, nên không giữ lại.
+  CODE THẬT (HEAD, src/web/mod.rs:95-98):
+            web_login_limit: SlidingLimiter::new(10),
+            web_account_limit: SlidingLimiter::new(30),
+            agent_login_limit: SlidingLimiter::new(10),
+            agent_account_limit: SlidingLimiter::new(13),
+  Patch:
+-            agent_login_limit: SlidingLimiter::new(10),
++            agent_login_limit: SlidingLimiter::new(1000), // fork P3: was 10/min; SITL batch logins
+
+E3. P4
+  WHAT: Field đã có sẵn là comm_server_port (đọc env de_comm_server_port). Fork thêm field mới public_port (env de_public_port)
+        và hàm public_port_value(). Hàm này dùng ở 2 chỗ: login reply và watchdog.
+  WHY: PROMPT_CLAUDE.md viết field "server_port" đọc env "server_port"; cả hai không tồn tại. "Some(p) => Value::from(p as u32)"
+       thiếu Some(...) nên không compile (kiểu trả về là Option<Value>). Bản thật dùng Some(json!(p)) với p: u64,
+       vì json! là macro serde_json đã import sẵn trong server.rs. Port listen vẫn dùng server_port_value() như upstream.
+  [SỬA] Snippet "v_reply_d.insert(CONST_CS_SERVER_PORT, env.public_port_value())" trong PROMPT_EXPLAIN.md không phải dòng thật.
+        Không có biến env trong hàm này, insert nhận Value chứ không nhận Option, và key có .into(). Dòng thật ở dưới.
+  CODE THẬT src/server.rs:27-30, 40-41, 98-104, 130:
+    /// de_comm_server_port
+    pub comm_server_port: Option<String>,
+    /// de_public_port (fork P4: port advertised to clients when running behind a proxy)
+    pub public_port: Option<String>,
+            comm_server_port: std::env::var("de_comm_server_port").ok(),
+            public_port: std::env::var("de_public_port").ok(),
+    /// Fork P4: port advertised to clients: `de_public_port` (as int) || server_port_value().
+    pub fn public_port_value(&self) -> Option<Value> {
+        match self.env.public_port.as_deref().and_then(|p| p.trim().parse::<u64>().ok()) {
+            Some(p) => Some(json!(p)),
+            None => self.server_port_value(),
+        }
+    }
+            if let Some(v) = self.public_port_value() {      (server.rs:130, watchdog -> "serverPort")
+  CODE THẬT src/comm_server.rs:38-40 (login reply, key "h" = CONST_CS_SERVER_PORT):
+    if let Some(p) = p_server.public_port_value() {
+        v_reply_d.insert(CONST_CS_SERVER_PORT.into(), p);
+    }
+
+E4. Rebrand lần 2 (double-apply)
+  WHAT: Trước lần này, tree là name "de_server"/"de_authenticator", version "5.7.0-fork" (lần vá theo yêu cầu 10:51).
+        Lần này đổi tiếp thành de_fork_server 6.0.2-fork / de_fork_authenticator 7.7.3-fork.
+        rebrand_*.patch được tạo so với upstream gốc (andruavserver 6.0.2 / de_auth_server 7.7.3), nên áp 1 lần lên master sạch là ra trạng thái cuối.
+        Dấu "}" thừa sau version auth là typo của prompt, đã bỏ.
+  [SỬA] "client chỉ thấy sau rebrand lần này" là không chính xác. Version (CARGO_PKG_VERSION) được in ở banner, và server gửi nó
+        cho auth trong watchdog ngay khi chạy. Lần chạy gate/C4 trước đã gửi "5.7.0-fork", lần này gửi "6.0.2-fork".
+        Không có client bên ngoài nào thấy, vì mọi thứ chỉ chạy local.
+  CODE THẬT:
+    Cargo.toml (server):  name = "de_fork_server"           version = "6.0.2-fork"
+    Cargo.toml (auth):    name = "de_fork_authenticator"    version = "7.7.3-fork"
+    src/server.rs:123:            v_obj.insert("version".into(), json!(VERSION));
+    banner lúc chạy: DE Communication Server version "6.0.2-fork" / DE Authentication Server version "7.7.3-fork"
+
+E5. server.config không có server_name / server_version
+  WHAT: Key duy nhất gần nghĩa là "server_id": "DE_CommSrv" (server.config:2). Tôi giữ nguyên.
+  WHY: Auth dùng id này làm khóa tra public key S2S và để quản lý comm server. Nếu đổi một phía mà không đổi
+       s2s_trusted_server_keys bên auth thì sẽ lệch, khi bật s2s_auth.
+  [SỬA] "client nhìn thấy id trong reply login" là SAI. Login reply (comm_server.rs:30-44) chỉ có request id, error,
+        public_host, port "h" và temp key, không có server_id. Id chỉ đi trong watchdog server -> auth (server.rs:125 "serverId").
+  CODE THẬT:
+    server.config:2            "server_id"                     : "DE_CommSrv",
+    src/server.rs:125                v_obj.insert("serverId".into(), v.clone());
+    auth server.config:40-41   "s2s_trusted_server_keys"   : {
+                                   "DE_CommSrv": "./ssl_local/DE_ServerComm_public.pem"
+
+E6. Conflict "dòng 26"
+  WHAT: Khi áp rebrand_de_server.patch lên master sạch thì không có conflict nào. Patch chỉ chạm server.config:3,4 và enable_storage_server.
+        Block udp_relay (server.config:18-22) và command_plugin giữ nguyên upstream, không đưa vào patch.
+  WHY: Conflict dòng 26 trước đây là do áp patch server.config của bản JS cũ, vốn có ngữ cảnh khác, lên config mới. Patch Rust tạo lại từ ngữ cảnh mới nên hết conflict.
+  CODE THẬT (rebrand_de_server.patch):
+-    "server_ip"                     : "::",
+-    "public_host"                   : "airgap.local",
++    "server_ip"                     : "0.0.0.0",
++    "public_host"                   : "127.0.0.1",
+-    "enable_storage_server"         : true,
++    "enable_storage_server"         : false,
+
+E7. C4
+  WHAT: Viết lại C4_router_6546.js theo giao thức thật: login HTTPS POST /w/wl/ ở auth, nhận cs {h, f}, mở WSS tới port h,
+        gửi {"ty":"s","mt":"de_auth",...}, rồi gửi message {"ty":"i","sd","tg","mt","ms"}.
+  WHY: Bản trong prompt gửi frame raw TCP tự chế (0xDE + id + JSON) vào 9967. Server chỉ nhận WebSocket over TLS,
+       nên mọi check sẽ fail vì sai giao thức, không phải vì router. Hàm run() trong prompt cũng không thu kết quả.
+       check3 nối thẳng 9966 vì delayproxy.py đọc hết dữ liệu vào queue của nó: server thấy socket luôn rỗng,
+       nên không bao giờ vượt high-water.
+  Semantics: outbound_guard bỏ mọi frame latest_wins khi buffered >= high_water, không có cơ chế "giữ frame mới nhất".
+       Kết quả đo khớp với điều này: gửi 100, nhận 39, frame q=99 (mới nhất) bị bỏ.
+  [SỬA] PROMPT_EXPLAIN.md ghi "C3 nói đúng nghĩa này". Trong các checklist trước, C3 là kiểm ms.t/q (uint32, wraparound),
+        không nói gì về latest_wins. Nguồn đúng là comment của chính file outbound_guard.rs (bên dưới). Ngoài ra "lastest_wins" là typo.
+  CODE THẬT src/chat/outbound_guard.rs:6-7, 80-81:
+//!   - latest_wins: stale telemetry is worthless; skipped when the target
+//!     socket is above the high-water mark.
+    ///   buffered < high_water              -> send
+    ///   high_water <= buffered < hard_cap  -> send must_deliver, skip latest_wins
+  Kết quả (c4.txt):
+    check1 6503: PASS / check1 6546: PASS
+    check2 9021 x64: socket còn sống, reply=64, mẫu reply={"error":"bad_request"}
+    check3 6503 latest_wins: gửi=100 nhận=39 drop=61 q đầu=0 q cuối=96 receiver còn sống
+
+E8. WSL restart
+  WHAT: Lần build/test với tên mới, cargo test làm WSL restart 2 lần (Wsl/Service/ERROR_NETNAME_DELETED, uptime về 0).
+        Binary đang build dở bị hỏng: andruavauth chạy ra exit 0 và không in gì. Tôi đã xoá binary, touch src rồi build lại,
+        cả hai đều in banner đúng version, và C4 chạy trên chính binary này.
+  [SỬA] Lý do chưa chạy lại test không phải "vì fail duy nhất là _csrf". Lý do là chạy cargo test thì làm sập WSL.
+        Kết quả 88/88 (server) và 34/35 (auth, fail admin_login_page_and_csrf, cũng fail trên upstream sạch) là của lần chạy trước,
+        trên cùng code chỉ khác name/version trong Cargo.toml. Lần đổi tên này chưa được test lại.
+
+Diff thống kê 5 file (áp lên master sạch: server 20900c0, auth 9274556)
+  P4_de_server_rust.patch: src/server.rs +12/-1  src/comm_server.rs +1/-1  
+  rebrand_de_server.patch: server.config +3/-3  Cargo.toml +2/-2  
+  P3_de_authenticator_rust.patch: src/web/mod.rs +1/-1  
+  rebrand_de_authenticator.patch: server.config +1/-1  Cargo.toml +2/-2  
+  C4_router_6546.js: file mới, 113 dòng (node + module ws)
+  Tổng code+config: server +18/-7, auth +4/-4

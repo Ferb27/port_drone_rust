@@ -1,0 +1,154 @@
+const EVENT_LIST = Object.freeze({
+	EVENTS: Object.freeze(
+		[
+			"EE_WS_OPEN",
+			"EE_WS_CLOSE",
+			"EE_onDeleted",
+			"EE_msgFromUnit_GPS",
+			"EE_msgFromUnit_IMG",
+			"EE_andruavUnitAdded",
+			"EE_HomePointChanged",
+			"EE_DistinationPointChanged",
+			"EE_andruavUnitError",
+			"EE_andruavUnitGeoFenceUpdated",
+			"EE_andruavUnitGeoFenceHit",
+			"EE_msgFromUnit_WayPoints",
+			"EE_msgFromUnit_WayPointsUpdated",
+			"EE_andruavUnitArmedUpdated",
+			"EE_andruavUnitGeoFenceBeforeDelete",
+			"EE_andruavUnitFCBUpdated",
+			"EE_andruavUnitFlyingUpdated",
+			"EE_andruavUnitFightModeUpdated",
+			"EE_andruavUnitVehicleTypeUpdated",
+			"EE_onProxyInfoUpdated",
+			"EE_onAndruavUnitSwarmUpdated",
+			"EE_onDroneEngagePilotChanged",
+			"EE_andruavUnitLidarInfo",
+			"EE_andruavUnitLidarShow",
+			"EE_onMessage",
+			"EE_onChatMessage",
+			"EE_onChatToggle",
+			"EE_onModuleUpdated",
+			"EE_onPreferenceChanged",
+			"EE_unitAdded",
+			"EE_unitUpdated",
+			"EE_OldModule",
+			"EE_unitHighlighted",
+			"EE_unitOnlineChanged",
+			"EE_unitP2PUpdated",
+			"EE_unitSDRTrigger",
+			"EE_unitNavUpdated",
+			"EE_onSocketStatus",
+			"EE_onSocketStatus2",
+			"EE_onGUIMessage",
+			"EE_onGUIMessageHide",
+			"EE_updateLogin",
+			"EE_videoStreamStarted",
+			"EE_videoStreamRedraw",
+			"EE_videoStreamStopped",
+			"EE_videoTabClose",
+			"EE_unitTelemetryOff",
+			"EE_BattViewToggle",
+			"EE_EKFViewToggle",
+			"EE_adsbExchangeReady",
+			"EE_onShapeCreated",
+			"EE_onShapeSelected",
+			"EE_onMissionReset",
+			"EE_onShapeEdited",
+			"EE_onShapeDeleted",
+			"EE_mapMissionUpdate",
+			"EE_servoOutputUpdate",
+			"EE_DetectedTarget",
+			"EE_SearchableTarget",
+
+			"EE_cameraZoomChanged",
+			"EE_cameraFlashChanged",
+
+			"EE_updateParameters",
+
+			"EE_requestGamePad",
+			"EE_releaseGamePad",
+
+			"EE_GamePad_Connected",
+			"EE_GamePad_Disconnected",
+			"EE_GamePad_Axes_Updated",
+			"EE_GamePad_Other_Axes_Updated",
+			"EE_GamePad_Button_Updated",
+			"EE_GamePad_Config_Index_Changed",
+			"EE_GamePad_Control_Update",
+
+
+			"EE_viewLinkGimbalAttitude",
+
+			"EE_onPlanToggle",
+			"EE_onAdvancedMode",
+			"EE_ErrorMessage",
+			"EE_adsbExpiredUpdate",
+		"EE_adsbCleared",
+		"EE_adsbError",
+
+
+			"EE_Auth_Login_In_Progress",
+			"EE_Auth_Logined",
+			"EE_Auth_BAD_Logined",
+			"EE_Auth_Account_Created",
+			"EE_Auth_Account_Regenerated",
+			"EE_Auth_Account_BAD_Operation",
+			"EE_Auth_Logout_Completed",
+			"EE_Auth_Logout_Failed",
+
+			"EE_TeamAdmin_InfoLoaded",
+			"EE_TeamAdmin_UsersLoaded",
+			"EE_TeamAdmin_UserAdded",
+			"EE_TeamAdmin_UserUpdated",
+			"EE_TeamAdmin_UserDeleted",
+			"EE_TeamAdmin_Error",
+
+			"EE_Video_State_Change",
+			"EE_unitGPIOUpdated",
+
+			"EE_onSoundListUpdated",
+
+			"EE_andruavSignalling",
+
+			"EE_onMissionItemToggle",
+			"EE_onTrackingStatusChanged",
+			"EE_unitPreclandStatusChanged",
+			"EE_onTrackingAIStatusChanged",
+			"EE_onTrackingAIObjectListUpdate",
+
+			"EE_onWebRTC_Video_Statistics",
+
+			"EE_Language_Changed",
+			"EE_Opacity_Control",
+
+			"EE_WebConnector_Not_Running",
+		"EE_unitTelnetStatus",
+		"EE_unitTelnetData",
+		"EE_Mission_Loaded",
+		"EE_Mission_Saved",
+		"EE_Mission_Deleted",
+		"EE_StorageServerState",
+		"EE_News_Loaded",
+		"EE_News_Saved",
+		"EE_News_Deleted",
+		"EE_News_Push",
+		"EE_onNewsToggle",
+		"EE_onNewsWriteToggle",
+		"EE_AisStream_Push",
+		"EE_mapViewChanged",
+		"EE_map3dShown",
+		"EE_LayoutChanged",
+		"EE_MapPopupChanged",
+
+		"EE_stillImagesChanged",
+		"EE_unitRemoteExecuteResult"
+		].reduce((acc, name, index) => {
+			acc[name] = `EVT_${index + 1}`;
+			return acc;
+		}, {})
+	)
+});
+
+export const EVENTS = EVENT_LIST.EVENTS; // Named export for EVENTS
+export default EVENT_LIST;
